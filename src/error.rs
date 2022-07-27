@@ -1,0 +1,7 @@
+
+
+
+pub enum Error {
+    KeyAlreadyEmpty,
+}
+
