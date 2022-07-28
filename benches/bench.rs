@@ -1,13 +1,8 @@
 use bytes::Bytes;
 use criterion::*;
 use hashbrown::HashMap;
-use parking_lot::Mutex;
 use smt::digest::Digest;
 use smt::{KVStore, SparseMerkleTree};
-use std::sync::{
-    atomic::{AtomicUsize, Ordering},
-    Arc,
-};
 
 #[derive(Debug)]
 pub enum Error {
@@ -20,15 +15,15 @@ impl core::fmt::Display for Error {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct SimpleStore {
-    data: Arc<Mutex<HashMap<Bytes, Bytes>>>,
+    data: HashMap<Bytes, Bytes>,
 }
 
 impl SimpleStore {
     pub fn new() -> Self {
         Self {
-            data: Arc::new(Mutex::new(HashMap::new())),
+            data: HashMap::new(),
         }
     }
 }
@@ -37,27 +32,24 @@ impl KVStore for SimpleStore {
     type Error = Error;
 
     fn get(&self, key: &[u8]) -> Result<Option<Bytes>, Self::Error> {
-        let data = self.data.lock();
-        Ok(data.get(key).map(core::clone::Clone::clone))
+        Ok(self.data.get(key).map(core::clone::Clone::clone))
     }
 
-    fn set(&self, key: Bytes, value: Bytes) -> Result<(), Self::Error> {
-        let mut data = self.data.lock();
-        data.insert(key, value);
+    fn set(&mut self, key: Bytes, value: Bytes) -> Result<(), Self::Error> {
+        self.data.insert(key, value);
         Ok(())
     }
 
-    fn remove(&self, key: &[u8]) -> Result<Bytes, Self::Error> {
-        let mut data = self.data.lock();
-        data.remove(key).ok_or(Error::NotFound)
+    fn remove(&mut self, key: &[u8]) -> Result<Bytes, Self::Error> {
+        self.data.remove(key).ok_or(Error::NotFound)
     }
 
     fn contains(&self, key: &[u8]) -> Result<bool, Self::Error> {
-        Ok(self.data.lock().contains_key(key))
+        Ok(self.data.contains_key(key))
     }
 }
 
-fn benche_update(c: &mut Criterion) {
+fn bench_update(c: &mut Criterion) {
     let (smn, smv) = (SimpleStore::new(), SimpleStore::new());
     let mut smt = SparseMerkleTree::new(smn, smv, sha2::Sha256::new());
     let mut count = 0;
@@ -77,7 +69,7 @@ fn benche_update(c: &mut Criterion) {
     });
 }
 
-fn benche_remove(c: &mut Criterion) {
+fn bench_remove(c: &mut Criterion) {
     let (smn, smv) = (SimpleStore::new(), SimpleStore::new());
     let mut smt = SparseMerkleTree::new(smn, smv, sha2::Sha256::new());
 
@@ -104,8 +96,8 @@ fn benche_remove(c: &mut Criterion) {
 
 criterion_group! {
     benches,
-    benche_update,
-    benche_remove,
+    bench_update,
+    bench_remove,
 }
 
 criterion_main!(benches);

@@ -12,22 +12,21 @@ pub mod tests;
 
 const RIGHT: usize = 1;
 const DEFAULT_VALUE: Bytes = Bytes::new();
-const DEFAULT_VALUE_SLICE: [u8; 0] = [];
 
 /// Sparse Merkle tree.
-pub struct SparseMerkleTree<NS, VS, H> {
+pub struct SparseMerkleTree<S, H> {
     th: TreeHasher<H>,
-    nodes: NS,
-    values: VS,
+    nodes: S,
+    values: S,
     root: Bytes,
 }
 
-impl<NS, VS, H> SparseMerkleTree<NS, VS, H> {
-    pub fn nodes(&self) -> &NS {
+impl<S, H> SparseMerkleTree<S, H> {
+    pub fn nodes(&self) -> &S {
         &self.nodes
     }
 
-    pub fn values(&self) -> &VS {
+    pub fn values(&self) -> &S {
         &self.values
     }
 
@@ -47,24 +46,24 @@ impl<NS, VS, H> SparseMerkleTree<NS, VS, H> {
     }
 }
 
-impl<NS, VS, H: digest::Digest + digest::FixedOutputReset> SparseMerkleTree<NS, VS, H> {
-    pub fn new(nodes: NS, values: VS, hasher: H) -> Self {
+impl<S, H: digest::Digest + digest::FixedOutputReset> SparseMerkleTree<S, H> {
+    pub fn new(nodes_store: S, values_store: S, hasher: H) -> Self {
         let th = TreeHasher::new(hasher, vec![0; TreeHasher::<H>::path_size()].into());
         let root = th.placeholder();
         Self {
             th,
-            nodes,
-            values,
+            nodes: nodes_store,
+            values: values_store,
             root,
         }
     }
 
     /// Imports a Sparse Merkle tree from a non-empty KVStore.
-    pub fn import(nodes: NS, values: VS, hasher: H, root: impl Into<Bytes>) -> Self {
+    pub fn import(nodes_store: S, values_store: S, hasher: H, root: impl Into<Bytes>) -> Self {
         Self {
             th: TreeHasher::new(hasher, vec![0; TreeHasher::<H>::path_size()].into()),
-            nodes,
-            values,
+            nodes: nodes_store,
+            values: values_store,
             root: root.into(),
         }
     }
@@ -75,9 +74,9 @@ impl<NS, VS, H: digest::Digest + digest::FixedOutputReset> SparseMerkleTree<NS, 
     }
 }
 
-impl<NS, VS: KVStore, H: digest::Digest + digest::FixedOutputReset> SparseMerkleTree<NS, VS, H> {
+impl<S: KVStore, H: digest::Digest + digest::FixedOutputReset> SparseMerkleTree<S, H> {
     /// Gets the value of a key from the tree.
-    pub fn get(&self, key: &[u8]) -> Result<Option<Bytes>, <VS as KVStore>::Error> {
+    pub fn get(&self, key: &[u8]) -> Result<Option<Bytes>, <S as KVStore>::Error> {
         if self.root.as_ref().eq(self.th.placeholder_ref()) {
             return Ok(None);
         }
@@ -91,24 +90,16 @@ impl<NS, VS: KVStore, H: digest::Digest + digest::FixedOutputReset> SparseMerkle
 
     /// Returns true if the value at the given key is non-default, false
     /// otherwise.
-    pub fn contains(&self, key: &[u8]) -> Result<bool, <VS as KVStore>::Error> {
+    pub fn contains(&self, key: &[u8]) -> Result<bool, <S as KVStore>::Error> {
         if self.root.as_ref().eq(self.th.placeholder_ref()) {
             return Ok(false);
         }
         let path = self.th.path(key);
         self.values.contains(path.as_ref())
     }
-}
 
-impl<NS, VS, H> SparseMerkleTree<NS, VS, H>
-where
-    NS: KVStore,
-    NS::Error: core::convert::From<VS::Error>,
-    VS: KVStore,
-    H: digest::Digest + digest::FixedOutputReset,
-{
     /// Removes a value from tree.
-    pub fn remove(&mut self, key: &[u8]) -> Result<(), <NS as KVStore>::Error> {
+    pub fn remove(&mut self, key: &[u8]) -> Result<(), <S as KVStore>::Error> {
         self.update(key, DEFAULT_VALUE)
     }
 
@@ -117,7 +108,7 @@ where
         &mut self,
         key: &[u8],
         root: Bytes,
-    ) -> Result<Bytes, <NS as KVStore>::Error> {
+    ) -> Result<Bytes, <S as KVStore>::Error> {
         self.update_for_root(key, DEFAULT_VALUE, root)
     }
 
@@ -127,7 +118,7 @@ where
         side_nodes: Vec<Bytes>,
         path_nodes: Vec<Bytes>,
         old_leaf_data: Option<Bytes>,
-    ) -> Result<Option<Bytes>, <NS as KVStore>::Error> {
+    ) -> Result<Option<Bytes>, <S as KVStore>::Error> {
         if path_nodes[0].eq(self.th.placeholder_ref()) {
             // This key is already empty as it is a placeholder; return an None.
             return Ok(None);
@@ -193,7 +184,7 @@ where
     }
 
     /// Sets a new value for a key in the tree.
-    pub fn update(&mut self, key: &[u8], value: Bytes) -> Result<(), <NS as KVStore>::Error> {
+    pub fn update(&mut self, key: &[u8], value: Bytes) -> Result<(), <S as KVStore>::Error> {
         let new_root = self.update_for_root(key, value, self.root())?;
         self.set_root(new_root);
         Ok(())
@@ -205,7 +196,7 @@ where
         key: &[u8],
         value: Bytes,
         root: Bytes,
-    ) -> Result<Bytes, <NS as KVStore>::Error> {
+    ) -> Result<Bytes, <S as KVStore>::Error> {
         let path = {
             let path = self.th.path(key);
             let len = path.len();
@@ -245,7 +236,7 @@ where
         side_nodes: Vec<Bytes>,
         path_nodes: Vec<Bytes>,
         old_leaf_data: Option<Bytes>,
-    ) -> Result<Bytes, <NS as KVStore>::Error> {
+    ) -> Result<Bytes, <S as KVStore>::Error> {
         let depth = self.depth();
         let value_hash = self.th.digest(&value);
         let (mut current_hash, mut current_data) = self.th.digest_leaf(&path, &value_hash);
@@ -275,9 +266,9 @@ where
 
             self.nodes.set(current_hash.clone(), current_data.clone())?;
             current_data = current_hash.clone();
-        } else if old_value_hash.is_some() {
+        } else if let Some(old_value_hash) = old_value_hash {
             // Short-circuit if the same value is being set
-            if value_hash.deref().eq(old_value_hash.unwrap()) {
+            if value_hash.deref().eq(old_value_hash) {
                 return Ok(self.root());
             }
 
@@ -296,35 +287,41 @@ where
         let offset_of_side_nodes = depth - side_nodes.len();
 
         for i in 0..self.depth() {
-            let side_node = match i.checked_sub(offset_of_side_nodes) {
-                Some(val) => side_nodes[val].clone(),
+            match i.checked_sub(offset_of_side_nodes) {
+                Some(val) => {
+                    if get_bit_at_from_msb(&path, depth - i - 1) == RIGHT {
+                        (current_hash, current_data) =
+                            self.th.digest_node(&side_nodes[val], &current_data);
+                    } else {
+                        (current_hash, current_data) =
+                            self.th.digest_node(&current_data, &side_nodes[val]);
+                    }
+
+                    self.nodes.set(current_hash.clone(), current_data.clone())?;
+                    current_data = current_hash.clone();
+                }
                 None => {
                     if common_prefix_count != depth && common_prefix_count > depth - i - 1 {
                         // If there are no sidenodes at this height, but the number of
                         // bits that the paths of the two leaf nodes share in common is
                         // greater than this depth, then we need to build up the tree
                         // to this depth with placeholder values at siblings.
-                        self.th.placeholder()
+                        if get_bit_at_from_msb(&path, depth - i - 1) == RIGHT {
+                            (current_hash, current_data) = self.th.digest_right_node(&current_data);
+                        } else {
+                            (current_hash, current_data) = self.th.digest_left_node(&current_data);
+                        }
+
+                        self.nodes.set(current_hash.clone(), current_data.clone())?;
+                        current_data = current_hash.clone();
                     } else {
                         continue;
                     }
                 }
             };
-
-            if get_bit_at_from_msb(&path, depth - i - 1) == RIGHT {
-                (current_hash, current_data) = self.th.digest_node(&side_node, &current_data);
-            } else {
-                (current_hash, current_data) = self.th.digest_node(&current_data, &side_node);
-            }
-
-            self.nodes.set(current_hash.clone(), current_data.clone())?;
-            current_data = current_hash.clone();
         }
 
-        self.values
-            .set(path, value)
-            .map(|_| current_hash)
-            .map_err(core::convert::Into::into)
+        self.values.set(path, value).map(|_| current_hash)
     }
 
     /// Get all the sibling nodes (sidenodes) for a given path from a given root.
@@ -337,7 +334,7 @@ where
         path: &[u8],
         root: Bytes,
         get_sibling_data: bool,
-    ) -> Result<UpdateResult, <NS as KVStore>::Error> {
+    ) -> Result<UpdateResult, <S as KVStore>::Error> {
         // Side nodes for the path. Nodes are inserted in reverse order, then the
         // slice is reversed at the end.
         let mut side_nodes = Vec::with_capacity(self.depth());

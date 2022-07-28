@@ -16,7 +16,7 @@ impl core::fmt::Display for Error {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct SimpleStore {
     data: Arc<Mutex<HashMap<Bytes, Bytes>>>,
 }
@@ -37,13 +37,13 @@ impl KVStore for SimpleStore {
         Ok(data.get(key).map(core::clone::Clone::clone))
     }
 
-    fn set(&self, key: Bytes, value: Bytes) -> Result<(), Self::Error> {
+    fn set(&mut self, key: Bytes, value: Bytes) -> Result<(), Self::Error> {
         let mut data = self.data.lock();
         data.insert(key, value);
         Ok(())
     }
 
-    fn remove(&self, key: &[u8]) -> Result<Bytes, Self::Error> {
+    fn remove(&mut self, key: &[u8]) -> Result<Bytes, Self::Error> {
         let mut data = self.data.lock();
         data.remove(key).ok_or(Error::NotFound)
     }
@@ -53,7 +53,7 @@ impl KVStore for SimpleStore {
     }
 }
 
-fn new_sparse_merkle_tree() -> SparseMerkleTree<SimpleStore, SimpleStore, sha2::Sha256> {
+fn new_sparse_merkle_tree() -> SparseMerkleTree<SimpleStore, sha2::Sha256> {
     let (smn, smv) = (SimpleStore::new(), SimpleStore::new());
     SparseMerkleTree::new(smn, smv, sha2::Sha256::new())
 }
@@ -160,7 +160,7 @@ fn test_smt_remove_basic() {
 
 #[test]
 fn test_sparse_merkle_tree_max_height_case() {
-    let mut smt = new_sparse_merkle_tree();
+    let _smt = new_sparse_merkle_tree();
     // Make two neighboring keys.
     //
     // The dummy hash function expects keys to prefixed with four bytes of 0,

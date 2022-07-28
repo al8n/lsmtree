@@ -12,7 +12,7 @@ pub(crate) struct TreeHasher<H> {
 }
 
 impl<H: Digest + FixedOutputReset> TreeHasher<H> {
-    pub fn new(hasher: H, zero_value: Bytes) -> Self {
+    pub(crate) fn new(hasher: H, zero_value: Bytes) -> Self {
         Self { hasher, zero_value }
     }
 
@@ -48,6 +48,34 @@ impl<H: Digest + FixedOutputReset> TreeHasher<H> {
         right_data: impl AsRef<[u8]>,
     ) -> (Bytes, Bytes) {
         let left_data = left_data.as_ref();
+        let right_data = right_data.as_ref();
+        let mut value = Vec::with_capacity(1 + left_data.len() + right_data.len());
+        value.push(NODE_PREFIX[0]);
+        value.extend_from_slice(left_data);
+        value.extend_from_slice(right_data);
+        <H as Digest>::update(&mut self.hasher, &value);
+        let ptr = Box::into_raw(Box::new(self.hasher.finalize_reset())) as *mut u8;
+        let size = <H as OutputSizeUser>::output_size();
+        let sum = Bytes::from(unsafe { Vec::from_raw_parts(ptr, size, size) });
+        (sum, value.into())
+    }
+
+    pub(crate) fn digest_left_node(&mut self, left_data: impl AsRef<[u8]>) -> (Bytes, Bytes) {
+        let left_data = left_data.as_ref();
+        let right_data = self.placeholder_ref();
+        let mut value = Vec::with_capacity(1 + left_data.len() + right_data.len());
+        value.push(NODE_PREFIX[0]);
+        value.extend_from_slice(left_data);
+        value.extend_from_slice(right_data);
+        <H as Digest>::update(&mut self.hasher, &value);
+        let ptr = Box::into_raw(Box::new(self.hasher.finalize_reset())) as *mut u8;
+        let size = <H as OutputSizeUser>::output_size();
+        let sum = Bytes::from(unsafe { Vec::from_raw_parts(ptr, size, size) });
+        (sum, value.into())
+    }
+
+    pub(crate) fn digest_right_node(&mut self, right_data: impl AsRef<[u8]>) -> (Bytes, Bytes) {
+        let left_data = self.placeholder_ref();
         let right_data = right_data.as_ref();
         let mut value = Vec::with_capacity(1 + left_data.len() + right_data.len());
         value.push(NODE_PREFIX[0]);

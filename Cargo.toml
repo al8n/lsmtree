@@ -3,23 +3,21 @@ name = "smt"
 version = "0.0.0"
 edition = "2021"
 repository = "https://github.com/al8n/smt"
-description = "A template for creating Rust open-source repo on GitHub"
+description = "Implements a Sparse Merkle tree for a key-value store. The tree implements the same optimisations specified in the libra whitepaper, to reduce the number of hash operations required per tree operation to O(k) where k is the number of non-empty elements in the tree."
 license = "MIT/Apache-2.0"
 
 [[bench]]
-path = "benches/foo.rs"
-name = "foo"
+path = "benches/bench.rs"
+name = "bench"
 harness = false
 
 [features]
-default = []
-std = ["kvstructs/default", "bytes/default"]
+default = ["std"]
+std = ["bytes/default"]
 
 [dependencies]
 bytes = { version = "1.2", default-features = false }
 digest = "0.10"
-kvstructs = { version = "0.0.23", default-features = false }
-sha2 = { version = "0.10", default-features = false, optional = true }
 
 [dev-dependencies]
 criterion = "0.3"

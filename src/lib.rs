@@ -5,13 +5,10 @@
 #![allow(clippy::borrow_interior_mutable_const)]
 
 extern crate alloc;
-
-mod error;
-pub mod hashes;
 mod smt;
 #[cfg(test)]
-pub use smt::tests::{Error, SimpleStore};
-pub use smt::SparseMerkleTree;
+pub use self::smt::tests::{Error, SimpleStore};
+pub use self::smt::SparseMerkleTree;
 
 mod tree_hasher;
 
@@ -26,10 +23,10 @@ pub trait KVStore {
     /// Gets the value for a key. If not exists, returns `Ok(None)`.
     fn get(&self, key: &[u8]) -> Result<Option<Bytes>, Self::Error>;
     /// Updates the value for a key.
-    fn set(&self, key: Bytes, value: Bytes) -> Result<(), Self::Error>;
-    /// Remove a key.
-    fn remove(&self, key: &[u8]) -> Result<Bytes, Self::Error>;
-
+    fn set(&mut self, key: Bytes, value: Bytes) -> Result<(), Self::Error>;
+    /// Remove value by key.
+    fn remove(&mut self, key: &[u8]) -> Result<Bytes, Self::Error>;
+    /// Returns if key exists in the store.
     fn contains(&self, key: &[u8]) -> Result<bool, Self::Error>;
 }
 
