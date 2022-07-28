@@ -3,9 +3,16 @@
 #![cfg_attr(docsrs, allow(unused_attributes))]
 #![allow(clippy::declare_interior_mutable_const)]
 #![allow(clippy::borrow_interior_mutable_const)]
+
+extern crate alloc;
+
 mod error;
 pub mod hashes;
 mod smt;
+#[cfg(test)]
+pub use smt::tests::{Error, SimpleStore};
+pub use smt::SparseMerkleTree;
+
 mod tree_hasher;
 
 pub use bytes;
@@ -16,22 +23,14 @@ pub use digest;
 pub trait KVStore {
     type Error: core::fmt::Debug + core::fmt::Display;
 
-    /// Gets the value for a key.
-    fn get(&self, key: &[u8]) -> Result<&Bytes, Self::Error>;
+    /// Gets the value for a key. If not exists, returns `Ok(None)`.
+    fn get(&self, key: &[u8]) -> Result<Option<Bytes>, Self::Error>;
     /// Updates the value for a key.
     fn set(&self, key: Bytes, value: Bytes) -> Result<(), Self::Error>;
     /// Remove a key.
     fn remove(&self, key: &[u8]) -> Result<Bytes, Self::Error>;
 
-    fn contains(&self, key: &[u8]) -> bool;
-}
-
-pub trait Hasher: digest::Digest {
-    /// Returns the hash's underlying block size.
-    /// The Write method must be able to accept any amount
-    /// of data, but it may operate more efficiently if all writes
-    /// are a multiple of the block size.
-    fn block_size(&self) -> usize;
+    fn contains(&self, key: &[u8]) -> Result<bool, Self::Error>;
 }
 
 /// Gets the bit at an offset from the most significant bit

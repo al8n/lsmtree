@@ -1,8 +1,14 @@
-use crate::get_bit_at_from_msb;
+use alloc::boxed::Box;
+use alloc::{vec, vec::Vec};
+use core::ops::Deref;
+
+use crate::{count_common_prefix, get_bit_at_from_msb};
 
 use super::{tree_hasher::TreeHasher, KVStore};
 use bytes::Bytes;
-use digest::OutputSizeUser;
+
+#[cfg(test)]
+pub mod tests;
 
 const RIGHT: usize = 1;
 const DEFAULT_VALUE: Bytes = Bytes::new();
@@ -16,26 +22,13 @@ pub struct SparseMerkleTree<NS, VS, H> {
     root: Bytes,
 }
 
-impl<NS, VS, H: digest::Digest + digest::FixedOutputReset> SparseMerkleTree<NS, VS, H> {
-    pub fn new(nodes: NS, values: VS, hasher: H) -> Self {
-        let th = TreeHasher::new(hasher, vec![0; TreeHasher::<H>::path_size()].into());
-        let root = th.placeholder();
-        Self {
-            th,
-            nodes,
-            values,
-            root,
-        }
+impl<NS, VS, H> SparseMerkleTree<NS, VS, H> {
+    pub fn nodes(&self) -> &NS {
+        &self.nodes
     }
 
-    /// Imports a Sparse Merkle tree from a non-empty KVStore.
-    pub fn import(nodes: NS, values: VS, hasher: H, root: Vec<u8>) -> Self {
-        Self {
-            th: TreeHasher::new(hasher, vec![0; TreeHasher::<H>::path_size()].into()),
-            nodes,
-            values,
-            root: root.into(),
-        }
+    pub fn values(&self) -> &VS {
+        &self.values
     }
 
     #[inline]
@@ -52,6 +45,29 @@ impl<NS, VS, H: digest::Digest + digest::FixedOutputReset> SparseMerkleTree<NS, 
     pub fn set_root(&mut self, root: Bytes) {
         self.root = root;
     }
+}
+
+impl<NS, VS, H: digest::Digest + digest::FixedOutputReset> SparseMerkleTree<NS, VS, H> {
+    pub fn new(nodes: NS, values: VS, hasher: H) -> Self {
+        let th = TreeHasher::new(hasher, vec![0; TreeHasher::<H>::path_size()].into());
+        let root = th.placeholder();
+        Self {
+            th,
+            nodes,
+            values,
+            root,
+        }
+    }
+
+    /// Imports a Sparse Merkle tree from a non-empty KVStore.
+    pub fn import(nodes: NS, values: VS, hasher: H, root: impl Into<Bytes>) -> Self {
+        Self {
+            th: TreeHasher::new(hasher, vec![0; TreeHasher::<H>::path_size()].into()),
+            nodes,
+            values,
+            root: root.into(),
+        }
+    }
 
     #[inline]
     fn depth(&self) -> usize {
@@ -61,12 +77,12 @@ impl<NS, VS, H: digest::Digest + digest::FixedOutputReset> SparseMerkleTree<NS, 
 
 impl<NS, VS: KVStore, H: digest::Digest + digest::FixedOutputReset> SparseMerkleTree<NS, VS, H> {
     /// Gets the value of a key from the tree.
-    pub fn get(&self, key: &[u8]) -> Result<&[u8], <VS as KVStore>::Error> {
+    pub fn get(&self, key: &[u8]) -> Result<Option<Bytes>, <VS as KVStore>::Error> {
         if self.root.as_ref().eq(self.th.placeholder_ref()) {
-            return Ok(&DEFAULT_VALUE_SLICE);
+            return Ok(None);
         }
 
-        let path = self.th.path(key.as_ref());
+        let path = self.th.path(key);
         match self.values.get(path.as_ref()) {
             Ok(value) => Ok(value),
             Err(e) => Err(e),
@@ -76,7 +92,11 @@ impl<NS, VS: KVStore, H: digest::Digest + digest::FixedOutputReset> SparseMerkle
     /// Returns true if the value at the given key is non-default, false
     /// otherwise.
     pub fn contains(&self, key: &[u8]) -> Result<bool, <VS as KVStore>::Error> {
-        self.get(key).map(|value| DEFAULT_VALUE.ne(value))
+        if self.root.as_ref().eq(self.th.placeholder_ref()) {
+            return Ok(false);
+        }
+        let path = self.th.path(key);
+        self.values.contains(path.as_ref())
     }
 }
 
@@ -186,7 +206,13 @@ where
         value: Bytes,
         root: Bytes,
     ) -> Result<Bytes, <NS as KVStore>::Error> {
-        let path = self.th.path(key);
+        let path = {
+            let path = self.th.path(key);
+            let len = path.len();
+            let ptr = Box::into_raw(Box::new(path)) as *mut u8;
+            Bytes::from(unsafe { Vec::from_raw_parts(ptr, len, len) })
+        };
+
         let UpdateResult {
             side_nodes,
             path_nodes,
@@ -200,7 +226,7 @@ where
                 self.remove_with_side_nodes(&path, side_nodes, path_nodes, old_leaf_data)?;
             match new_root {
                 Some(new_root) => {
-                    self.values.remove(path.as_ref())?;
+                    self.values.remove(&path)?;
                     Ok(new_root)
                 }
                 // This key is already empty; return the old root.
@@ -208,19 +234,97 @@ where
             }
         } else {
             // Insert operation.
-            self.update_with_side_notes(&path, value, side_nodes, path_nodes, old_leaf_data)
+            self.update_with_side_notes(path, value, side_nodes, path_nodes, old_leaf_data)
         }
     }
 
     fn update_with_side_notes(
         &mut self,
-        _path: &[u8],
-        _value: Bytes,
-        _side_nodes: Vec<Bytes>,
-        _path_nodes: Vec<Bytes>,
-        _old_leaf_data: Option<Bytes>,
+        path: Bytes,
+        value: Bytes,
+        side_nodes: Vec<Bytes>,
+        path_nodes: Vec<Bytes>,
+        old_leaf_data: Option<Bytes>,
     ) -> Result<Bytes, <NS as KVStore>::Error> {
-        todo!()
+        let depth = self.depth();
+        let value_hash = self.th.digest(&value);
+        let (mut current_hash, mut current_data) = self.th.digest_leaf(&path, &value_hash);
+        self.nodes.set(current_hash.clone(), current_data.clone())?;
+        current_data = current_hash.clone();
+
+        // If the leaf node that sibling nodes lead to has a different actual path
+        // than the leaf node being updated, we need to create an intermediate node
+        // with this leaf node and the new leaf node as children.
+        //
+        // First, get the number of bits that the paths of the two leaf nodes share
+        // in common as a prefix.
+        let (common_prefix_count, old_value_hash) = if path_nodes[0].eq(self.th.placeholder_ref()) {
+            (depth, None)
+        } else {
+            let (actual_path, value_hash) =
+                TreeHasher::<H>::parse_leaf(old_leaf_data.as_ref().unwrap());
+            (count_common_prefix(&path, actual_path), Some(value_hash))
+        };
+
+        if common_prefix_count != depth {
+            if get_bit_at_from_msb(&path, common_prefix_count) == RIGHT {
+                (current_hash, current_data) = self.th.digest_node(&path_nodes[0], &current_data);
+            } else {
+                (current_hash, current_data) = self.th.digest_node(&current_data, &path_nodes[0]);
+            }
+
+            self.nodes.set(current_hash.clone(), current_data.clone())?;
+            current_data = current_hash.clone();
+        } else if old_value_hash.is_some() {
+            // Short-circuit if the same value is being set
+            if value_hash.deref().eq(old_value_hash.unwrap()) {
+                return Ok(self.root());
+            }
+
+            // If an old leaf exists, remove it
+            self.nodes.remove(&path_nodes[0])?;
+            self.values.remove(&path)?;
+        }
+
+        // All remaining path nodes are orphaned
+        for node in path_nodes.into_iter().skip(1) {
+            self.nodes.remove(&node)?;
+        }
+
+        // The offset from the bottom of the tree to the start of the side nodes.
+        // Note: i-offsetOfSideNodes is the index into sideNodes[]
+        let offset_of_side_nodes = depth - side_nodes.len();
+
+        for i in 0..self.depth() {
+            let side_node = match i.checked_sub(offset_of_side_nodes) {
+                Some(val) => side_nodes[val].clone(),
+                None => {
+                    if common_prefix_count != depth && common_prefix_count > depth - i - 1 {
+                        // If there are no sidenodes at this height, but the number of
+                        // bits that the paths of the two leaf nodes share in common is
+                        // greater than this depth, then we need to build up the tree
+                        // to this depth with placeholder values at siblings.
+                        self.th.placeholder()
+                    } else {
+                        continue;
+                    }
+                }
+            };
+
+            if get_bit_at_from_msb(&path, depth - i - 1) == RIGHT {
+                (current_hash, current_data) = self.th.digest_node(&side_node, &current_data);
+            } else {
+                (current_hash, current_data) = self.th.digest_node(&current_data, &side_node);
+            }
+
+            self.nodes.set(current_hash.clone(), current_data.clone())?;
+            current_data = current_hash.clone();
+        }
+
+        self.values
+            .set(path, value)
+            .map(|_| current_hash)
+            .map_err(core::convert::Into::into)
     }
 
     /// Get all the sibling nodes (sidenodes) for a given path from a given root.
@@ -250,18 +354,18 @@ where
         }
 
         let mut current_data = self.nodes.get(&root)?;
-        if TreeHasher::<H>::is_leaf(current_data) {
+        if TreeHasher::<H>::is_leaf(&current_data) {
             // If the root is a leaf, there are also no sidenodes to return.
             return Ok(UpdateResult {
                 side_nodes,
                 path_nodes,
                 sibling_data: None,
-                current_data: Some(current_data.clone()),
+                current_data,
             });
         }
 
         for i in 0..self.depth() {
-            let (left_node, right_node) = TreeHasher::<H>::parse_node(current_data);
+            let (left_node, right_node) = TreeHasher::<H>::parse_node(&current_data);
 
             // Get sidenode depending on whether the path bit is on or off.
             let (side_node, node_hash) = if get_bit_at_from_msb(path, i) == RIGHT {
@@ -273,7 +377,7 @@ where
             if node_hash.eq(self.th.placeholder_ref()) {
                 // If the node is a placeholder, we've reached the end.
                 if get_sibling_data {
-                    let sibling_data = self.nodes.get(&side_node).map(core::clone::Clone::clone)?;
+                    let sibling_data = self.nodes.get(&side_node)?;
 
                     side_nodes.push(side_node);
                     path_nodes.push(node_hash);
@@ -282,7 +386,7 @@ where
                     return Ok(UpdateResult {
                         side_nodes,
                         path_nodes,
-                        sibling_data: Some(sibling_data),
+                        sibling_data,
                         current_data: None,
                     });
                 }
@@ -301,10 +405,10 @@ where
             }
 
             current_data = self.nodes.get(&node_hash)?;
-            if TreeHasher::<H>::is_leaf(current_data) {
+            if TreeHasher::<H>::is_leaf(&current_data) {
                 // If the node is a leaf, we've reached the end.
                 if get_sibling_data {
-                    let sibling_data = self.nodes.get(&side_node).map(core::clone::Clone::clone)?;
+                    let sibling_data = self.nodes.get(&side_node)?;
 
                     side_nodes.push(side_node);
                     path_nodes.push(node_hash);
@@ -313,8 +417,8 @@ where
                     return Ok(UpdateResult {
                         side_nodes,
                         path_nodes,
-                        sibling_data: Some(sibling_data),
-                        current_data: Some(current_data.clone()),
+                        sibling_data,
+                        current_data,
                     });
                 }
 
@@ -326,7 +430,7 @@ where
                     side_nodes,
                     path_nodes,
                     sibling_data: None,
-                    current_data: Some(current_data.clone()),
+                    current_data,
                 });
             }
 
@@ -340,7 +444,7 @@ where
             side_nodes,
             path_nodes,
             sibling_data: None,
-            current_data: Some(current_data.clone()),
+            current_data,
         })
     }
 }

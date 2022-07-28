@@ -1,8 +1,8 @@
 [package]
-name = "template-rs"
-version = "0.1.2"
+name = "smt"
+version = "0.0.0"
 edition = "2021"
-repository = "https://github.com/al8n/template-rs"
+repository = "https://github.com/al8n/smt"
 description = "A template for creating Rust open-source repo on GitHub"
 license = "MIT/Apache-2.0"
 
@@ -24,6 +24,9 @@ sha2 = { version = "0.10", default-features = false, optional = true }
 [dev-dependencies]
 criterion = "0.3"
 tempfile = "3"
+parking_lot = "0.12"
+sha2 = "0.10"
+hashbrown = "0.12"
 
 [package.metadata.docs.rs]
 all-features = true

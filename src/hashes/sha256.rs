@@ -1,11 +1,5 @@
 use sha2::Sha256;
 
-impl crate::Hasher for Sha256 {
-    fn block_size(&self) -> usize {
-        64
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
