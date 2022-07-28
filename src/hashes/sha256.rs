@@ -14,10 +14,9 @@ mod tests {
     #[test]
     fn test_sha2() {
         let mut hasher = Sha256::new();
-        hasher.update(vec![0; 1024 * 1024]);
+        hasher.update(vec![0; 0]);
         let hash = hasher.finalize_reset();
         eprintln!("{:?}", hash);
         println!("{}", <Sha256 as Digest>::output_size());
     }
 }
-
