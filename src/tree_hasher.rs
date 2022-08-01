@@ -7,25 +7,26 @@ const LEAF_PREFIX: [u8; 1] = [0];
 const NODE_PREFIX: [u8; 1] = [1];
 
 pub(crate) struct TreeHasher<H> {
-    hasher: H,
     zero_value: Bytes,
+    _marker: core::marker::PhantomData<H>,
 }
 
 impl<H: Digest + FixedOutputReset> TreeHasher<H> {
-    pub(crate) fn new(hasher: H, zero_value: Bytes) -> Self {
-        Self { hasher, zero_value }
+    pub(crate) fn new(zero_value: Bytes) -> Self {
+        Self { _marker: Default::default(), zero_value }
     }
 
     pub(crate) fn digest(
-        &mut self,
+        &self,
         data: impl AsRef<[u8]>,
     ) -> GenericArray<u8, <H as OutputSizeUser>::OutputSize> {
-        <H as Digest>::update(&mut self.hasher, data);
-        self.hasher.finalize_reset()
+        let mut hasher = <H as Digest>::new();
+        <H as Digest>::update(&mut hasher, data);
+        hasher.finalize()
     }
 
     pub(crate) fn digest_leaf(
-        &mut self,
+        &self,
         path: impl AsRef<[u8]>,
         leaf_data: impl AsRef<[u8]>,
     ) -> (Bytes, Bytes) {
@@ -35,57 +36,51 @@ impl<H: Digest + FixedOutputReset> TreeHasher<H> {
         value.push(LEAF_PREFIX[0]);
         value.extend_from_slice(path);
         value.extend_from_slice(leaf_data);
-        <H as Digest>::update(&mut self.hasher, &value);
-        let ptr = Box::into_raw(Box::new(self.hasher.finalize_reset())) as *mut u8;
+        let mut hasher = <H as Digest>::new(); 
+        <H as Digest>::update(&mut hasher, &value);
+        let ptr = Box::into_raw(Box::new(hasher.finalize())) as *mut u8;
         let size = <H as OutputSizeUser>::output_size();
         let sum = Bytes::from(unsafe { Vec::from_raw_parts(ptr, size, size) });
         (sum, value.into())
     }
 
     pub(crate) fn digest_node(
-        &mut self,
+        &self,
         left_data: impl AsRef<[u8]>,
         right_data: impl AsRef<[u8]>,
     ) -> (Bytes, Bytes) {
         let left_data = left_data.as_ref();
         let right_data = right_data.as_ref();
+        self.digest_node_helper(left_data, right_data)
+    }
+
+    fn digest_node_helper(
+        &self,
+        left_data: &[u8],
+        right_data: &[u8],
+    ) -> (Bytes, Bytes) {
         let mut value = Vec::with_capacity(1 + left_data.len() + right_data.len());
         value.push(NODE_PREFIX[0]);
         value.extend_from_slice(left_data);
         value.extend_from_slice(right_data);
-        <H as Digest>::update(&mut self.hasher, &value);
-        let ptr = Box::into_raw(Box::new(self.hasher.finalize_reset())) as *mut u8;
+        let mut hasher = <H as Digest>::new();
+        <H as Digest>::update(&mut hasher, &value);
+        let ptr = Box::into_raw(Box::new(hasher.finalize())) as *mut u8;
         let size = <H as OutputSizeUser>::output_size();
         let sum = Bytes::from(unsafe { Vec::from_raw_parts(ptr, size, size) });
         (sum, value.into())
     }
 
-    pub(crate) fn digest_left_node(&mut self, left_data: impl AsRef<[u8]>) -> (Bytes, Bytes) {
+    pub(crate) fn digest_left_node(&self, left_data: impl AsRef<[u8]>) -> (Bytes, Bytes) {
         let left_data = left_data.as_ref();
         let right_data = self.placeholder_ref();
-        let mut value = Vec::with_capacity(1 + left_data.len() + right_data.len());
-        value.push(NODE_PREFIX[0]);
-        value.extend_from_slice(left_data);
-        value.extend_from_slice(right_data);
-        <H as Digest>::update(&mut self.hasher, &value);
-        let ptr = Box::into_raw(Box::new(self.hasher.finalize_reset())) as *mut u8;
-        let size = <H as OutputSizeUser>::output_size();
-        let sum = Bytes::from(unsafe { Vec::from_raw_parts(ptr, size, size) });
-        (sum, value.into())
+        self.digest_node_helper(left_data, right_data) 
     }
 
-    pub(crate) fn digest_right_node(&mut self, right_data: impl AsRef<[u8]>) -> (Bytes, Bytes) {
+    pub(crate) fn digest_right_node(&self, right_data: impl AsRef<[u8]>) -> (Bytes, Bytes) {
         let left_data = self.placeholder_ref();
         let right_data = right_data.as_ref();
-        let mut value = Vec::with_capacity(1 + left_data.len() + right_data.len());
-        value.push(NODE_PREFIX[0]);
-        value.extend_from_slice(left_data);
-        value.extend_from_slice(right_data);
-        <H as Digest>::update(&mut self.hasher, &value);
-        let ptr = Box::into_raw(Box::new(self.hasher.finalize_reset())) as *mut u8;
-        let size = <H as OutputSizeUser>::output_size();
-        let sum = Bytes::from(unsafe { Vec::from_raw_parts(ptr, size, size) });
-        (sum, value.into())
+        self.digest_node_helper(left_data, right_data)
     }
 
     pub(crate) fn parse_leaf(data: &[u8]) -> (&[u8], &[u8]) {

@@ -51,7 +51,7 @@ impl KVStore for SimpleStore {
 
 fn bench_update(c: &mut Criterion) {
     let (smn, smv) = (SimpleStore::new(), SimpleStore::new());
-    let mut smt = SparseMerkleTree::new(smn, smv, sha2::Sha256::new());
+    let mut smt = SparseMerkleTree::<SimpleStore, sha2::Sha256>::new(smn, smv);
     let mut count = 0;
     c.bench_function("smt update", |b| {
         b.iter_batched(
@@ -71,7 +71,7 @@ fn bench_update(c: &mut Criterion) {
 
 fn bench_remove(c: &mut Criterion) {
     let (smn, smv) = (SimpleStore::new(), SimpleStore::new());
-    let mut smt = SparseMerkleTree::new(smn, smv, sha2::Sha256::new());
+    let mut smt = SparseMerkleTree::<SimpleStore, sha2::Sha256>::new(smn, smv);
 
     for i in 0..100_000 {
         let s = Bytes::from(i.to_string());

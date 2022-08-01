@@ -2,7 +2,6 @@ use alloc::sync::Arc;
 use hashbrown::HashMap;
 
 use super::*;
-use digest::Digest;
 use parking_lot::Mutex;
 
 #[derive(Debug)]
@@ -55,7 +54,7 @@ impl KVStore for SimpleStore {
 
 fn new_sparse_merkle_tree() -> SparseMerkleTree<SimpleStore, sha2::Sha256> {
     let (smn, smv) = (SimpleStore::new(), SimpleStore::new());
-    SparseMerkleTree::new(smn, smv, sha2::Sha256::new())
+    SparseMerkleTree::<SimpleStore, sha2::Sha256>::new(smn, smv)
 }
 
 #[test]
@@ -102,10 +101,9 @@ fn test_smt_update_basic() {
     );
 
     // Test that a tree can be imported from a KVStore.
-    let smt2 = SparseMerkleTree::import(
+    let smt2 = SparseMerkleTree::<SimpleStore, sha2::Sha256>::import(
         smt.nodes.clone(),
         smt.values.clone(),
-        sha2::Sha256::new(),
         smt.root(),
     );
     assert_eq!(

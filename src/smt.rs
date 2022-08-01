@@ -47,8 +47,8 @@ impl<S, H> SparseMerkleTree<S, H> {
 }
 
 impl<S, H: digest::Digest + digest::FixedOutputReset> SparseMerkleTree<S, H> {
-    pub fn new(nodes_store: S, values_store: S, hasher: H) -> Self {
-        let th = TreeHasher::new(hasher, vec![0; TreeHasher::<H>::path_size()].into());
+    pub fn new(nodes_store: S, values_store: S) -> Self {
+        let th = TreeHasher::new(vec![0; TreeHasher::<H>::path_size()].into());
         let root = th.placeholder();
         Self {
             th,
@@ -59,9 +59,9 @@ impl<S, H: digest::Digest + digest::FixedOutputReset> SparseMerkleTree<S, H> {
     }
 
     /// Imports a Sparse Merkle tree from a non-empty KVStore.
-    pub fn import(nodes_store: S, values_store: S, hasher: H, root: impl Into<Bytes>) -> Self {
+    pub fn import(nodes_store: S, values_store: S, root: impl Into<Bytes>) -> Self {
         Self {
-            th: TreeHasher::new(hasher, vec![0; TreeHasher::<H>::path_size()].into()),
+            th: TreeHasher::new(vec![0; TreeHasher::<H>::path_size()].into()),
             nodes: nodes_store,
             values: values_store,
             root: root.into(),
