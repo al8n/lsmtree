@@ -1,6 +1,6 @@
 use bytes::Bytes;
 
-use crate::{tree_hasher::{Hasher, LEAF_PREFIX}, count_set_bits};
+use crate::{tree_hasher::{TreeHasher, LEAF_PREFIX}, count_set_bits};
 use digest::{Digest, FixedOutputReset};
 
 
@@ -42,7 +42,7 @@ impl SparseMerkleProof {
 
     }
 
-    fn sanity_check<H: super::Hasher>(&self, th: &mut TreeHasher<H, { H::OUTPUT_SIZE }>) -> bool {
+    fn sanity_check<H: digest::Digest>(&self, th: &mut TreeHasher<H>) -> bool {
         // Do a basic sanity check on the proof, so that a malicious proof cannot
 	    // cause the verifier to fatally exit (e.g. due to an index out-of-range
 	    // error) or cause a CPU DoS attack.
@@ -75,7 +75,7 @@ impl SparseMerkleProof {
     }
 
     #[inline]
-    fn check_non_membership_proofs_size<H: super::Hasher>(&self, _th: &TreeHasher<H, { H::OUTPUT_SIZE }>) -> bool {
+    fn check_non_membership_proofs_size<H: digest::Digest>(&self, _th: &TreeHasher<H>) -> bool {
         if let Some(non_membership_proofs) = &self.non_membership_leaf_data {
             non_membership_proofs.len() != LEAF_PREFIX.len() + TreeHasher::<H>::path_size() + <H as digest::Digest>::output_size()
         } else {
@@ -128,7 +128,7 @@ impl SparseCompactMerkleProof {
         }
     }
 
-    fn sanity_check<H: super::Hasher>(&self, _th: &mut TreeHasher<H, { H::OUTPUT_SIZE }>) -> bool {
+    fn sanity_check<H: digest::Digest>(&self, _th: &mut TreeHasher<H>) -> bool {
         // Do a basic sanity check on the proof on the fields of the proof specific to
 	    // the compact proof only.
 	    //

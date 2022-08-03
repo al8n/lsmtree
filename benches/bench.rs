@@ -1,7 +1,6 @@
 use bytes::Bytes;
 use criterion::*;
 use hashbrown::HashMap;
-use smt::digest::Digest;
 use smt::{KVStore, SparseMerkleTree};
 
 #[derive(Debug)]
@@ -14,6 +13,8 @@ impl core::fmt::Display for Error {
         write!(f, "Error")
     }
 }
+
+impl std::error::Error for Error {}
 
 #[derive(Debug, Clone, Default)]
 pub struct SimpleStore {
@@ -30,6 +31,7 @@ impl SimpleStore {
 
 impl KVStore for SimpleStore {
     type Error = Error;
+    type Hasher = sha2::Sha256;
 
     fn get(&self, key: &[u8]) -> Result<Option<Bytes>, Self::Error> {
         Ok(self.data.get(key).map(core::clone::Clone::clone))
@@ -51,7 +53,7 @@ impl KVStore for SimpleStore {
 
 fn bench_update(c: &mut Criterion) {
     let (smn, smv) = (SimpleStore::new(), SimpleStore::new());
-    let mut smt = SparseMerkleTree::<SimpleStore, sha2::Sha256>::new(smn, smv);
+    let mut smt = SparseMerkleTree::<SimpleStore>::new(smn, smv);
     let mut count = 0;
     c.bench_function("smt update", |b| {
         b.iter_batched(
@@ -71,7 +73,7 @@ fn bench_update(c: &mut Criterion) {
 
 fn bench_remove(c: &mut Criterion) {
     let (smn, smv) = (SimpleStore::new(), SimpleStore::new());
-    let mut smt = SparseMerkleTree::<SimpleStore, sha2::Sha256>::new(smn, smv);
+    let mut smt = SparseMerkleTree::<SimpleStore>::new(smn, smv);
 
     for i in 0..100_000 {
         let s = Bytes::from(i.to_string());

@@ -14,14 +14,14 @@ const RIGHT: usize = 1;
 const DEFAULT_VALUE: Bytes = Bytes::new();
 
 /// Sparse Merkle tree.
-pub struct SparseMerkleTree<S, H> {
-    th: TreeHasher<H>,
+pub struct SparseMerkleTree<S: KVStore> {
+    th: TreeHasher<S::Hasher>,
     nodes: S,
     values: S,
     root: Bytes,
 }
 
-impl<S, H> SparseMerkleTree<S, H> {
+impl<S: KVStore> SparseMerkleTree<S> {
     pub fn nodes(&self) -> &S {
         &self.nodes
     }
@@ -46,9 +46,9 @@ impl<S, H> SparseMerkleTree<S, H> {
     }
 }
 
-impl<S, H: digest::Digest + digest::FixedOutputReset> SparseMerkleTree<S, H> {
+impl<S: KVStore> SparseMerkleTree<S> {
     pub fn new(nodes_store: S, values_store: S) -> Self {
-        let th = TreeHasher::new(vec![0; TreeHasher::<H>::path_size()].into());
+        let th = TreeHasher::new(vec![0; TreeHasher::<S::Hasher>::path_size()].into());
         let root = th.placeholder();
         Self {
             th,
@@ -61,7 +61,7 @@ impl<S, H: digest::Digest + digest::FixedOutputReset> SparseMerkleTree<S, H> {
     /// Imports a Sparse Merkle tree from a non-empty KVStore.
     pub fn import(nodes_store: S, values_store: S, root: impl Into<Bytes>) -> Self {
         Self {
-            th: TreeHasher::new(vec![0; TreeHasher::<H>::path_size()].into()),
+            th: TreeHasher::new(vec![0; TreeHasher::<S::Hasher>::path_size()].into()),
             nodes: nodes_store,
             values: values_store,
             root: root.into(),
@@ -70,11 +70,11 @@ impl<S, H: digest::Digest + digest::FixedOutputReset> SparseMerkleTree<S, H> {
 
     #[inline]
     fn depth(&self) -> usize {
-        TreeHasher::<H>::path_size() * 8
+        TreeHasher::<S::Hasher>::path_size() * 8
     }
 }
 
-impl<S: KVStore, H: digest::Digest + digest::FixedOutputReset> SparseMerkleTree<S, H> {
+impl<S: KVStore> SparseMerkleTree<S> {
     /// Gets the value of a key from the tree.
     pub fn get(&self, key: &[u8]) -> Result<Option<Bytes>, <S as KVStore>::Error> {
         if self.root.as_ref().eq(self.th.placeholder_ref()) {
@@ -124,7 +124,7 @@ impl<S: KVStore, H: digest::Digest + digest::FixedOutputReset> SparseMerkleTree<
             return Ok(None);
         }
 
-        let (actual_path, _) = TreeHasher::<H>::parse_leaf(old_leaf_data.as_ref().unwrap());
+        let (actual_path, _) = TreeHasher::<S::Hasher>::parse_leaf(old_leaf_data.as_ref().unwrap());
         if path.ne(actual_path) {
             // This key is already empty as a different key was found its place; return an error.
             return Ok(None);
@@ -143,7 +143,7 @@ impl<S: KVStore, H: digest::Digest + digest::FixedOutputReset> SparseMerkleTree<
             if current_data.is_empty() {
                 let side_node_value = self.nodes.get(side_node.as_ref())?;
 
-                if TreeHasher::<H>::is_leaf(&side_node_value) {
+                if TreeHasher::<S::Hasher>::is_leaf(&side_node_value) {
                     // This is the leaf sibling that needs to be bubbled up the tree.
                     current_hash = side_node.clone();
                     current_data = side_node.clone();
@@ -253,7 +253,7 @@ impl<S: KVStore, H: digest::Digest + digest::FixedOutputReset> SparseMerkleTree<
             (depth, None)
         } else {
             let (actual_path, value_hash) =
-                TreeHasher::<H>::parse_leaf(old_leaf_data.as_ref().unwrap());
+                TreeHasher::<S::Hasher>::parse_leaf(old_leaf_data.as_ref().unwrap());
             (count_common_prefix(&path, actual_path), Some(value_hash))
         };
 
@@ -351,7 +351,7 @@ impl<S: KVStore, H: digest::Digest + digest::FixedOutputReset> SparseMerkleTree<
         }
 
         let mut current_data = self.nodes.get(&root)?;
-        if TreeHasher::<H>::is_leaf(&current_data) {
+        if TreeHasher::<S::Hasher>::is_leaf(&current_data) {
             // If the root is a leaf, there are also no sidenodes to return.
             return Ok(UpdateResult {
                 side_nodes,
@@ -362,7 +362,7 @@ impl<S: KVStore, H: digest::Digest + digest::FixedOutputReset> SparseMerkleTree<
         }
 
         for i in 0..self.depth() {
-            let (left_node, right_node) = TreeHasher::<H>::parse_node(&current_data);
+            let (left_node, right_node) = TreeHasher::<S::Hasher>::parse_node(&current_data);
 
             // Get sidenode depending on whether the path bit is on or off.
             let (side_node, node_hash) = if get_bit_at_from_msb(path, i) == RIGHT {
@@ -402,7 +402,7 @@ impl<S: KVStore, H: digest::Digest + digest::FixedOutputReset> SparseMerkleTree<
             }
 
             current_data = self.nodes.get(&node_hash)?;
-            if TreeHasher::<H>::is_leaf(&current_data) {
+            if TreeHasher::<S::Hasher>::is_leaf(&current_data) {
                 // If the node is a leaf, we've reached the end.
                 if get_sibling_data {
                     let sibling_data = self.nodes.get(&side_node)?;

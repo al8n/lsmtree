@@ -15,6 +15,8 @@ impl core::fmt::Display for Error {
     }
 }
 
+impl std::error::Error for Error {}
+
 #[derive(Debug, Clone, Default)]
 pub struct SimpleStore {
     data: Arc<Mutex<HashMap<Bytes, Bytes>>>,
@@ -30,6 +32,7 @@ impl SimpleStore {
 
 impl KVStore for SimpleStore {
     type Error = Error;
+    type Hasher = sha2::Sha256;
 
     fn get(&self, key: &[u8]) -> Result<Option<Bytes>, Self::Error> {
         let data = self.data.lock();
@@ -52,9 +55,9 @@ impl KVStore for SimpleStore {
     }
 }
 
-fn new_sparse_merkle_tree() -> SparseMerkleTree<SimpleStore, sha2::Sha256> {
+fn new_sparse_merkle_tree() -> SparseMerkleTree<SimpleStore> {
     let (smn, smv) = (SimpleStore::new(), SimpleStore::new());
-    SparseMerkleTree::<SimpleStore, sha2::Sha256>::new(smn, smv)
+    SparseMerkleTree::<SimpleStore>::new(smn, smv)
 }
 
 #[test]
@@ -101,7 +104,7 @@ fn test_smt_update_basic() {
     );
 
     // Test that a tree can be imported from a KVStore.
-    let smt2 = SparseMerkleTree::<SimpleStore, sha2::Sha256>::import(
+    let smt2 = SparseMerkleTree::<SimpleStore>::import(
         smt.nodes.clone(),
         smt.values.clone(),
         smt.root(),

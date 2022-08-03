@@ -3,7 +3,7 @@ use alloc::vec::Vec;
 use bytes::Bytes;
 use digest::{generic_array::GenericArray, Digest, FixedOutputReset, OutputSizeUser};
 
-const LEAF_PREFIX: [u8; 1] = [0];
+pub(crate) const LEAF_PREFIX: [u8; 1] = [0];
 const NODE_PREFIX: [u8; 1] = [1];
 
 pub(crate) struct TreeHasher<H> {
@@ -11,7 +11,7 @@ pub(crate) struct TreeHasher<H> {
     _marker: core::marker::PhantomData<H>,
 }
 
-impl<H: Digest + FixedOutputReset> TreeHasher<H> {
+impl<H: Digest> TreeHasher<H> {
     pub(crate) fn new(zero_value: Bytes) -> Self {
         Self { _marker: Default::default(), zero_value }
     }

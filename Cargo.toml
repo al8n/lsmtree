@@ -29,6 +29,7 @@ nightly = []
 [dependencies]
 bytes = { version = "1.2", default-features = false }
 rcbytes = { version = "1.2", default-features = false }
+crossbeam-utils = { version = "0.8", default-features = false }
 digest = "0.10"
 enum_dispatch = "0.3.8"
 
