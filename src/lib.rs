@@ -10,29 +10,30 @@ mod smt;
 pub use self::smt::tests::{Error, SimpleStore};
 pub use self::smt::SparseMerkleTree;
 
-mod tree_hasher;
 mod proofs;
+mod tree_hasher;
 
 pub use bytes;
 use bytes::Bytes;
 pub use digest;
+pub use proofs::*;
 
 /// Key-Value store
 pub trait KVStore {
     type Hasher: digest::Digest;
 
     #[cfg(not(feature = "std"))]
-    type Error: core::fmt::Debug + core::fmt::Display;
+    type Error: core::fmt::Debug + core::fmt::Display + From<BadProof>;
 
     #[cfg(feature = "std")]
-    type Error: std::error::Error;
+    type Error: std::error::Error + From<BadProof>;
 
     /// Gets the value for a key. If not exists, returns `Ok(None)`.
     fn get(&self, key: &[u8]) -> Result<Option<Bytes>, Self::Error>;
     /// Updates the value for a key.
-    fn set(&mut self, key: Bytes, value: Bytes) -> Result<(), Self::Error>;
+    fn set(&self, key: Bytes, value: Bytes) -> Result<(), Self::Error>;
     /// Remove value by key.
-    fn remove(&mut self, key: &[u8]) -> Result<Bytes, Self::Error>;
+    fn remove(&self, key: &[u8]) -> Result<Bytes, Self::Error>;
     /// Returns if key exists in the store.
     fn contains(&self, key: &[u8]) -> Result<bool, Self::Error>;
 }

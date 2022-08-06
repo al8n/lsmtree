@@ -1,11 +1,21 @@
+use std::sync::Arc;
+
 use bytes::Bytes;
 use criterion::*;
 use hashbrown::HashMap;
-use smt::{KVStore, SparseMerkleTree};
+use parking_lot::Mutex;
+use smt::{BadProof, KVStore, SparseMerkleTree};
 
 #[derive(Debug)]
 pub enum Error {
     NotFound,
+    BadProof(BadProof),
+}
+
+impl From<BadProof> for Error {
+    fn from(e: BadProof) -> Self {
+        Error::BadProof(e)
+    }
 }
 
 impl core::fmt::Display for Error {
@@ -18,13 +28,13 @@ impl std::error::Error for Error {}
 
 #[derive(Debug, Clone, Default)]
 pub struct SimpleStore {
-    data: HashMap<Bytes, Bytes>,
+    data: Arc<Mutex<HashMap<Bytes, Bytes>>>,
 }
 
 impl SimpleStore {
     pub fn new() -> Self {
         Self {
-            data: HashMap::new(),
+            data: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 }
@@ -34,20 +44,23 @@ impl KVStore for SimpleStore {
     type Hasher = sha2::Sha256;
 
     fn get(&self, key: &[u8]) -> Result<Option<Bytes>, Self::Error> {
-        Ok(self.data.get(key).map(core::clone::Clone::clone))
+        let data = self.data.lock();
+        Ok(data.get(key).map(core::clone::Clone::clone))
     }
 
-    fn set(&mut self, key: Bytes, value: Bytes) -> Result<(), Self::Error> {
-        self.data.insert(key, value);
+    fn set(&self, key: Bytes, value: Bytes) -> Result<(), Self::Error> {
+        let mut data = self.data.lock();
+        data.insert(key, value);
         Ok(())
     }
 
-    fn remove(&mut self, key: &[u8]) -> Result<Bytes, Self::Error> {
-        self.data.remove(key).ok_or(Error::NotFound)
+    fn remove(&self, key: &[u8]) -> Result<Bytes, Self::Error> {
+        let mut data = self.data.lock();
+        data.remove(key).ok_or(Error::NotFound)
     }
 
     fn contains(&self, key: &[u8]) -> Result<bool, Self::Error> {
-        Ok(self.data.contains_key(key))
+        Ok(self.data.lock().contains_key(key))
     }
 }
 

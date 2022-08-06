@@ -1,12 +1,21 @@
 use alloc::sync::Arc;
 use hashbrown::HashMap;
 
+use crate::proofs::BadProof;
+
 use super::*;
 use parking_lot::Mutex;
 
 #[derive(Debug)]
 pub enum Error {
     NotFound,
+    BadProof(BadProof),
+}
+
+impl From<BadProof> for Error {
+    fn from(e: BadProof) -> Self {
+        Error::BadProof(e)
+    }
 }
 
 impl core::fmt::Display for Error {
@@ -39,13 +48,13 @@ impl KVStore for SimpleStore {
         Ok(data.get(key).map(core::clone::Clone::clone))
     }
 
-    fn set(&mut self, key: Bytes, value: Bytes) -> Result<(), Self::Error> {
+    fn set(&self, key: Bytes, value: Bytes) -> Result<(), Self::Error> {
         let mut data = self.data.lock();
         data.insert(key, value);
         Ok(())
     }
 
-    fn remove(&mut self, key: &[u8]) -> Result<Bytes, Self::Error> {
+    fn remove(&self, key: &[u8]) -> Result<Bytes, Self::Error> {
         let mut data = self.data.lock();
         data.remove(key).ok_or(Error::NotFound)
     }
@@ -104,11 +113,8 @@ fn test_smt_update_basic() {
     );
 
     // Test that a tree can be imported from a KVStore.
-    let smt2 = SparseMerkleTree::<SimpleStore>::import(
-        smt.nodes.clone(),
-        smt.values.clone(),
-        smt.root(),
-    );
+    let smt2 =
+        SparseMerkleTree::<SimpleStore>::import(smt.nodes.clone(), smt.values.clone(), smt.root());
     assert_eq!(
         smt2.get(b"testKey").unwrap(),
         Some(Bytes::from("testValue2"))

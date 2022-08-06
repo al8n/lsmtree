@@ -1,17 +1,16 @@
+use super::{
+    count_common_prefix, get_bit_at_from_msb, tree_hasher::TreeHasher, KVStore,
+    SparseCompactMerkleProof, SparseMerkleProof,
+};
 use alloc::boxed::Box;
 use alloc::{vec, vec::Vec};
-use core::ops::Deref;
-
-use crate::{count_common_prefix, get_bit_at_from_msb};
-
-use super::{tree_hasher::TreeHasher, KVStore};
 use bytes::Bytes;
-
+use core::ops::Deref;
 #[cfg(test)]
 pub mod tests;
 
-const RIGHT: usize = 1;
-const DEFAULT_VALUE: Bytes = Bytes::new();
+pub(crate) const RIGHT: usize = 1;
+pub(crate) const DEFAULT_VALUE: Bytes = Bytes::new();
 
 /// Sparse Merkle tree.
 pub struct SparseMerkleTree<S: KVStore> {
@@ -322,6 +321,83 @@ impl<S: KVStore> SparseMerkleTree<S> {
         }
 
         self.values.set(path, value).map(|_| current_hash)
+    }
+
+    // Generates an updatable Merkle proof for a key against the current root.
+    pub fn prove_updatable(
+        &self,
+        key: impl AsRef<[u8]>,
+    ) -> Result<SparseMerkleProof<S::Hasher>, S::Error> {
+        self.prove_updatable_for_root(key, self.root())
+    }
+
+    // Generates an updatable Merkle proof for a key, against a specific node.
+    // This is primarily useful for generating Merkle proofs for subtrees.
+    pub fn prove_updatable_for_root(
+        &self,
+        key: impl AsRef<[u8]>,
+        root: Bytes,
+    ) -> Result<SparseMerkleProof<S::Hasher>, S::Error> {
+        self.do_prove_for_root(key, root, true)
+    }
+
+    /// Generates a compacted Merkle proof for a key against the current root.
+    pub fn prove_compact(
+        &self,
+        key: impl AsRef<[u8]>,
+    ) -> Result<SparseCompactMerkleProof<S::Hasher>, S::Error> {
+        self.prove_compact_for_root(key, self.root())
+    }
+
+    /// Generates a compacted Merkle proof for a key, at a specific root.
+    pub fn prove_compact_for_root(
+        &self,
+        key: impl AsRef<[u8]>,
+        root: Bytes,
+    ) -> Result<SparseCompactMerkleProof<S::Hasher>, S::Error> {
+        let proof = self.do_prove_for_root(key, root, false)?;
+        proof.compact_into().map_err(Into::into)
+    }
+
+    #[inline]
+    fn do_prove_for_root(
+        &self,
+        key: impl AsRef<[u8]>,
+        root: Bytes,
+        is_updatable: bool,
+    ) -> Result<SparseMerkleProof<S::Hasher>, S::Error> {
+        let path = self.th.path(key);
+        let UpdateResult {
+            side_nodes,
+            path_nodes,
+            sibling_data,
+            current_data: leaf_data,
+        } = self.side_nodes_for_root(path.as_ref(), root, is_updatable)?;
+
+        let non_empty_side_nodes = side_nodes
+            .into_iter()
+            .filter(|n| !n.is_empty())
+            .collect::<Vec<_>>();
+
+        // Deal with non-membership proofs. If the leaf hash is the placeholder
+        // value, we do not need to add anything else to the proof.
+        let non_membership_leaf_data = leaf_data.and_then(|leaf_data| {
+            if path_nodes[0].ne(self.th.placeholder_ref()) {
+                let (actual_path, _) = TreeHasher::<<S as KVStore>::Hasher>::parse_leaf(&leaf_data);
+                if actual_path.ne(path.as_ref()) {
+                    // This is a non-membership proof that involves showing a different leaf.
+                    // Add the leaf data to the proof.
+                    return Some(leaf_data);
+                }
+            }
+            None
+        });
+
+        Ok(SparseMerkleProof::new(
+            non_empty_side_nodes,
+            non_membership_leaf_data,
+            sibling_data,
+        ))
     }
 
     /// Get all the sibling nodes (sidenodes) for a given path from a given root.

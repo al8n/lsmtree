@@ -1,7 +1,7 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use bytes::Bytes;
-use digest::{generic_array::GenericArray, Digest, FixedOutputReset, OutputSizeUser};
+use digest::{generic_array::GenericArray, Digest, OutputSizeUser};
 
 pub(crate) const LEAF_PREFIX: [u8; 1] = [0];
 const NODE_PREFIX: [u8; 1] = [1];
@@ -13,7 +13,10 @@ pub(crate) struct TreeHasher<H> {
 
 impl<H: Digest> TreeHasher<H> {
     pub(crate) fn new(zero_value: Bytes) -> Self {
-        Self { _marker: Default::default(), zero_value }
+        Self {
+            _marker: Default::default(),
+            zero_value,
+        }
     }
 
     pub(crate) fn digest(
@@ -23,6 +26,24 @@ impl<H: Digest> TreeHasher<H> {
         let mut hasher = <H as Digest>::new();
         <H as Digest>::update(&mut hasher, data);
         hasher.finalize()
+    }
+
+    pub(crate) fn digest_leaf_hash(
+        &self,
+        path: impl AsRef<[u8]>,
+        leaf_data: impl AsRef<[u8]>,
+    ) -> Bytes {
+        let path = path.as_ref();
+        let leaf_data = leaf_data.as_ref();
+        let mut value = Vec::with_capacity(1 + path.len() + leaf_data.len());
+        value.push(LEAF_PREFIX[0]);
+        value.extend_from_slice(path);
+        value.extend_from_slice(leaf_data);
+        let mut hasher = <H as Digest>::new();
+        <H as Digest>::update(&mut hasher, &value);
+        let ptr = Box::into_raw(Box::new(hasher.finalize())) as *mut u8;
+        let size = <H as OutputSizeUser>::output_size();
+        Bytes::from(unsafe { Vec::from_raw_parts(ptr, size, size) })
     }
 
     pub(crate) fn digest_leaf(
@@ -36,7 +57,7 @@ impl<H: Digest> TreeHasher<H> {
         value.push(LEAF_PREFIX[0]);
         value.extend_from_slice(path);
         value.extend_from_slice(leaf_data);
-        let mut hasher = <H as Digest>::new(); 
+        let mut hasher = <H as Digest>::new();
         <H as Digest>::update(&mut hasher, &value);
         let ptr = Box::into_raw(Box::new(hasher.finalize())) as *mut u8;
         let size = <H as OutputSizeUser>::output_size();
@@ -54,11 +75,7 @@ impl<H: Digest> TreeHasher<H> {
         self.digest_node_helper(left_data, right_data)
     }
 
-    fn digest_node_helper(
-        &self,
-        left_data: &[u8],
-        right_data: &[u8],
-    ) -> (Bytes, Bytes) {
+    fn digest_node_helper(&self, left_data: &[u8], right_data: &[u8]) -> (Bytes, Bytes) {
         let mut value = Vec::with_capacity(1 + left_data.len() + right_data.len());
         value.push(NODE_PREFIX[0]);
         value.extend_from_slice(left_data);
@@ -74,7 +91,7 @@ impl<H: Digest> TreeHasher<H> {
     pub(crate) fn digest_left_node(&self, left_data: impl AsRef<[u8]>) -> (Bytes, Bytes) {
         let left_data = left_data.as_ref();
         let right_data = self.placeholder_ref();
-        self.digest_node_helper(left_data, right_data) 
+        self.digest_node_helper(left_data, right_data)
     }
 
     pub(crate) fn digest_right_node(&self, right_data: impl AsRef<[u8]>) -> (Bytes, Bytes) {
@@ -89,6 +106,15 @@ impl<H: Digest> TreeHasher<H> {
         (
             &data[leaf_prefix_len..path_size + leaf_prefix_len],
             &data[leaf_prefix_len + path_size..],
+        )
+    }
+
+    pub(crate) fn parse_leaf_bytes(data: &Bytes) -> (Bytes, Bytes) {
+        let leaf_prefix_len = LEAF_PREFIX.len();
+        let path_size = Self::path_size();
+        (
+            data.slice(leaf_prefix_len..path_size + leaf_prefix_len),
+            data.slice(leaf_prefix_len + path_size..),
         )
     }
 
