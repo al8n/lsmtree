@@ -7,7 +7,7 @@
 extern crate alloc;
 mod smt;
 #[cfg(test)]
-pub use self::smt::tests::{Error, SimpleStore};
+pub use self::smt::tests::{new_sparse_merkle_tree, Error, SimpleStore};
 pub use self::smt::SparseMerkleTree;
 
 mod proofs;

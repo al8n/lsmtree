@@ -11,7 +11,16 @@ pub(crate) struct TreeHasher<H> {
     _marker: core::marker::PhantomData<H>,
 }
 
-impl<H: Digest> TreeHasher<H> {
+impl<H: Digest + OutputSizeUser> Default for TreeHasher<H> {
+    fn default() -> Self {
+        Self {
+            zero_value: vec![0; <H as Digest>::output_size()].into(),
+            _marker: core::marker::PhantomData,
+        }
+    }
+}
+
+impl<H: Digest + OutputSizeUser> TreeHasher<H> {
     pub(crate) fn new(zero_value: Bytes) -> Self {
         Self {
             _marker: Default::default(),

@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use super::{
     count_set_bits, get_bit_at_from_msb, set_bit_at_from_msb,
     smt::{DEFAULT_VALUE, RIGHT},
@@ -83,7 +86,7 @@ impl<H: digest::Digest> SparseMerkleProof<H> {
             .iter()
             .enumerate()
             .filter_map(|(idx, node)| {
-                let node = node.slice(..<H as digest::Digest>::output_size());
+                let node = node.slice(..TreeHasher::<H>::path_size());
                 if node.eq(th.placeholder_ref()) {
                     set_bit_at_from_msb(bit_mask.as_mut_slice(), idx);
                     None
@@ -124,7 +127,7 @@ impl<H: digest::Digest> SparseMerkleProof<H> {
             .into_iter()
             .enumerate()
             .filter_map(|(idx, node)| {
-                let node = node.slice(..<H as digest::Digest>::output_size());
+                let node = node.slice(..TreeHasher::<H>::path_size());
                 if node.eq(th.placeholder_ref()) {
                     set_bit_at_from_msb(bit_mask.as_mut_slice(), idx);
                     None
@@ -374,7 +377,12 @@ impl<H: digest::Digest> SparseCompactMerkleProof<H> {
         true
     }
 
-    pub fn verify(&self, root: Bytes, key: Bytes, value: Bytes) -> bool {
+    pub fn verify(
+        &self,
+        root: impl AsRef<[u8]>,
+        key: impl AsRef<[u8]>,
+        value: impl AsRef<[u8]>,
+    ) -> bool {
         self.decompact()
             .map(|proof| proof.verify(root, key, value))
             .unwrap_or(false)

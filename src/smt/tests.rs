@@ -64,9 +64,85 @@ impl KVStore for SimpleStore {
     }
 }
 
-fn new_sparse_merkle_tree() -> SparseMerkleTree<SimpleStore> {
+pub fn new_sparse_merkle_tree() -> SparseMerkleTree<SimpleStore> {
     let (smn, smv) = (SimpleStore::new(), SimpleStore::new());
     SparseMerkleTree::<SimpleStore>::new(smn, smv)
+}
+
+struct DummyHasher<D: digest::Digest + digest::OutputSizeUser> {
+    base_hasher: D,
+    data: Vec<u8>,
+}
+
+impl<D: digest::Digest> DummyHasher<D> {
+    fn new() -> Self {
+        Self {
+            base_hasher: D::new(),
+            data: Vec::new(),
+        }
+    }
+}
+
+impl<D: digest::Digest + digest::OutputSizeUser> digest::OutputSizeUser for DummyHasher<D> {
+    type OutputSize = D::OutputSize;
+}
+
+impl<D: digest::Digest + digest::OutputSizeUser> digest::Digest for DummyHasher<D> {
+    fn new() -> Self {
+        Self {
+            base_hasher: D::new(),
+            data: Vec::new(),
+        }
+    }
+
+    fn new_with_prefix(data: impl AsRef<[u8]>) -> Self {
+        todo!()
+    }
+
+    fn update(&mut self, data: impl AsRef<[u8]>) {
+        self.data.extend(data.as_ref());
+    }
+
+    fn chain_update(self, data: impl AsRef<[u8]>) -> Self {
+        todo!()
+    }
+
+    fn finalize(self) -> digest::Output<Self> {
+        todo!()
+    }
+
+    fn finalize_into(self, out: &mut digest::Output<Self>) {
+        todo!()
+    }
+
+    fn finalize_reset(&mut self) -> digest::Output<Self>
+    where
+        Self: digest::FixedOutputReset,
+    {
+        todo!()
+    }
+
+    fn finalize_into_reset(&mut self, out: &mut digest::Output<Self>)
+    where
+        Self: digest::FixedOutputReset,
+    {
+        todo!()
+    }
+
+    fn reset(&mut self)
+    where
+        Self: digest::Reset,
+    {
+        todo!()
+    }
+
+    fn output_size() -> usize {
+        <D as digest::Digest>::output_size()
+    }
+
+    fn digest(data: impl AsRef<[u8]>) -> digest::Output<Self> {
+        todo!()
+    }
 }
 
 #[test]
@@ -164,6 +240,9 @@ fn test_smt_remove_basic() {
     assert_eq!(smt.get(b"testKey").unwrap(), Some(Bytes::from("testValue")));
     assert_eq!(smt.root(), root1);
 }
+
+#[test]
+fn test_sparse_merkle_tree_known() {}
 
 #[test]
 fn test_sparse_merkle_tree_max_height_case() {

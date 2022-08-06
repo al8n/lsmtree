@@ -323,6 +323,29 @@ impl<S: KVStore> SparseMerkleTree<S> {
         self.values.set(path, value).map(|_| current_hash)
     }
 
+    /// Generates a Merkle proof for a key against the current root.
+    ///
+    /// This proof can be used for read-only applications, but should not be used if
+    /// the leaf may be updated (e.g. in a state transition fraud proof). For
+    /// updatable proofs, see `prove_updatable`.
+    pub fn prove(&self, key: impl AsRef<[u8]>) -> Result<SparseMerkleProof<S::Hasher>, S::Error> {
+        self.prove_for_root(key, self.root())
+    }
+
+    /// ProveForRoot generates a Merkle proof for a key, against a specific node.
+    /// This is primarily useful for generating Merkle proofs for subtrees.
+    ///
+    /// This proof can be used for read-only applications, but should not be used if
+    /// the leaf may be updated (e.g. in a state transition fraud proof). For
+    /// updatable proofs, see `prove_updatable_for_root`.
+    pub fn prove_for_root(
+        &self,
+        key: impl AsRef<[u8]>,
+        root: Bytes,
+    ) -> Result<SparseMerkleProof<S::Hasher>, S::Error> {
+        self.do_prove_for_root(key, root, false)
+    }
+
     // Generates an updatable Merkle proof for a key against the current root.
     pub fn prove_updatable(
         &self,

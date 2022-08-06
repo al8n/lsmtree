@@ -37,6 +37,7 @@ enum_dispatch = "0.3.8"
 criterion = "0.3"
 tempfile = "3"
 parking_lot = "0.12"
+rand = "0.8"
 sha2 = { version = "0.10", features = ["asm-aarch64"] }
 hashbrown = "0.12"
 
