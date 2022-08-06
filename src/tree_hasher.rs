@@ -162,6 +162,12 @@ impl<H: Digest + OutputSizeUser> TreeHasher<H> {
         <H as Digest>::digest(key)
     }
 
+    pub(crate) fn path_into(&self, key: impl AsRef<[u8]>) -> Bytes {
+        let ptr = Box::into_raw(Box::new(<H as Digest>::digest(key))) as *mut u8;
+        let size = <H as OutputSizeUser>::output_size();
+        Bytes::from(unsafe { Vec::from_raw_parts(ptr, size, size) })
+    }
+
     pub(crate) fn path_size() -> usize {
         <H as digest::Digest>::output_size()
     }

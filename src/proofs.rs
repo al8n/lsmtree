@@ -8,7 +8,7 @@ use super::{
 };
 use bytes::Bytes;
 use core::{marker::PhantomData, ops::Div};
-use digest::{Digest, FixedOutputReset};
+use digest::Digest;
 
 /// Returned when an invalid Merkle proof is supplied.
 pub struct BadProof;
@@ -29,19 +29,20 @@ impl core::fmt::Display for BadProof {
 impl std::error::Error for BadProof {}
 
 /// SparseMerkleProof is a Merkle proof for an element in a SparseMerkleTree.
+#[derive(Debug, Clone)]
 pub struct SparseMerkleProof<H> {
     /// An array of the sibling nodes leading up to the leaf of the proof.
-    side_nodes: Vec<Bytes>,
+    pub(crate) side_nodes: Vec<Bytes>,
 
     /// The data of the unrelated leaf at the position
     /// of the key being proven, in the case of a non-membership proof. For
     /// membership proofs, is nil.
-    non_membership_leaf_data: Option<Bytes>,
+    pub(crate) non_membership_leaf_data: Option<Bytes>,
 
     /// the data of the sibling node to the leaf being proven,
     /// required for updatable proofs. For unupdatable proofs, is nil.
-    sibling_data: Option<Bytes>,
-    _marker: PhantomData<H>,
+    pub(crate) sibling_data: Option<Bytes>,
+    pub(crate) _marker: PhantomData<H>,
 }
 
 impl<H> SparseMerkleProof<H> {
@@ -57,6 +58,21 @@ impl<H> SparseMerkleProof<H> {
             sibling_data,
             _marker: PhantomData,
         }
+    }
+
+    #[inline]
+    pub fn sibling_data(&self) -> Option<&Bytes> {
+        self.sibling_data.as_ref()
+    }
+
+    #[inline]
+    pub fn non_membership_leaf_data(&self) -> Option<&Bytes> {
+        self.non_membership_leaf_data.as_ref()
+    }
+
+    #[inline]
+    pub fn side_nodes(&self) -> &[Bytes] {
+        &self.side_nodes
     }
 }
 
@@ -203,13 +219,12 @@ impl<H: digest::Digest> SparseMerkleProof<H> {
         root: impl AsRef<[u8]>,
         key: impl AsRef<[u8]>,
         value: impl AsRef<[u8]>,
-    ) -> (bool, Vec<Vec<Bytes>>)
+    ) -> (bool, Vec<(Bytes, Bytes)>)
     where
-        H: Digest + FixedOutputReset,
+        H: Digest,
     {
         let mut th = TreeHasher::<H>::new(vec![0; TreeHasher::<H>::path_size()].into());
         let path = th.path(key);
-
         if !self.sanity_check(&mut th) {
             return (false, vec![]);
         }
@@ -229,7 +244,7 @@ impl<H: digest::Digest> SparseMerkleProof<H> {
 
                     let (hash, data) = th.digest_leaf(actual_path, value_hash);
                     current_hash = hash;
-                    updates.push(vec![current_hash.clone(), data]);
+                    updates.push((current_hash.clone(), data));
                 }
                 None => {
                     current_hash = th.placeholder();
@@ -238,26 +253,31 @@ impl<H: digest::Digest> SparseMerkleProof<H> {
         } else {
             let value_hash = th.digest(value);
 
-            let (hash, data) = th.digest_leaf(path, value_hash);
+            let (hash, data) = th.digest_leaf(path.as_ref(), value_hash);
             current_hash = hash;
-            updates.push(vec![current_hash.clone(), data]);
+            updates.push((current_hash.clone(), data));
         }
 
         // Recompute root.
         let num = self.side_nodes.len();
-        self.side_nodes.iter().enumerate().for_each(|(idx, path)| {
-            let node = path.slice(..TreeHasher::<H>::path_size());
-            if get_bit_at_from_msb(path, num - 1 - idx) == RIGHT {
-                let (hash, data) = th.digest_node(node, &current_hash);
-                current_hash = hash;
-                updates.push(vec![current_hash.clone(), data]);
-            } else {
-                let (hash, data) = th.digest_node(&current_hash, node);
-                current_hash = hash;
-                updates.push(vec![current_hash.clone(), data]);
-            }
-        });
-
+        // for i in 0..num {
+        //     self.side_nodes[i].
+        // }
+        self.side_nodes
+            .iter()
+            .enumerate()
+            .for_each(|(idx, side_node)| {
+                let node = side_node.slice(..TreeHasher::<H>::path_size());
+                if get_bit_at_from_msb(path.as_ref(), num - 1 - idx) == RIGHT {
+                    let (hash, data) = th.digest_node(node, &current_hash);
+                    current_hash = hash;
+                    updates.push((current_hash.clone(), data));
+                } else {
+                    let (hash, data) = th.digest_node(&current_hash, node);
+                    current_hash = hash;
+                    updates.push((current_hash.clone(), data));
+                }
+            });
         (current_hash.eq(root.as_ref()), updates)
     }
 
@@ -309,6 +329,7 @@ impl<H: digest::Digest> SparseMerkleProof<H> {
 }
 
 /// SparseCompactMerkleProof is a compact Merkle proof for an element in a SparseMerkleTree.
+#[derive(Debug, Clone)]
 pub struct SparseCompactMerkleProof<H> {
     /// An array of the sibling nodes leading up to the leaf of the proof.
     side_nodes: Vec<Bytes>,
@@ -351,6 +372,26 @@ impl<H> SparseCompactMerkleProof<H> {
             sibling_data,
             _marker: PhantomData,
         }
+    }
+
+    #[inline]
+    pub fn sibling_data(&self) -> Option<&Bytes> {
+        self.sibling_data.as_ref()
+    }
+
+    #[inline]
+    pub fn non_membership_leaf_data(&self) -> Option<&Bytes> {
+        self.non_membership_leaf_data.as_ref()
+    }
+
+    #[inline]
+    pub fn original_side_nodes_len(&self) -> usize {
+        self.num_side_nodes
+    }
+
+    #[inline]
+    pub fn side_nodes(&self) -> &[Bytes] {
+        &self.side_nodes
     }
 }
 

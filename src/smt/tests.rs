@@ -31,6 +31,18 @@ pub struct SimpleStore {
     data: Arc<Mutex<HashMap<Bytes, Bytes>>>,
 }
 
+impl core::fmt::Display for SimpleStore {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        let data = self.data.lock();
+        writeln!(f, "length: {}", data.len());
+        for (key, value) in data.iter() {
+            writeln!(f, "{:?} => {:?}", key.as_ref(), value.as_ref())?;
+            writeln!(f, "")?;
+        }
+        Ok(())
+    }
+}
+
 impl SimpleStore {
     pub fn new() -> Self {
         Self {
@@ -252,4 +264,96 @@ fn test_sparse_merkle_tree_max_height_case() {
     // The dummy hash function expects keys to prefixed with four bytes of 0,
     // which will cause it to return the preimage itself as the digest, without
     // the first four bytes.
+}
+
+#[test]
+fn test_deep_sparse_merkle_sub_tree_basic() {
+    let mut smt = new_sparse_merkle_tree();
+
+    smt.update(b"testKey1", Bytes::from("testValue1")).unwrap();
+    smt.update(b"testKey2", Bytes::from("testValue2")).unwrap();
+    smt.update(b"testKey3", Bytes::from("testValue3")).unwrap();
+    smt.update(b"testKey4", Bytes::from("testValue4")).unwrap();
+    smt.update(b"testKey6", Bytes::from("testValue6")).unwrap();
+
+    let original_root = smt.root();
+
+    let proof1 = smt.prove_updatable(b"testKey1").unwrap();
+    let proof2 = smt.prove_updatable(b"testKey2").unwrap();
+    let proof5 = smt.prove_updatable(b"testKey5").unwrap();
+
+    let mut dsmst = SparseMerkleTree::import(SimpleStore::new(), SimpleStore::new(), smt.root());
+    dsmst
+        .add_branch(proof1, b"testKey1", Bytes::from("testValue1"))
+        .unwrap();
+
+    dsmst
+        .add_branch(proof2, b"testKey2", Bytes::from("testValue2"))
+        .unwrap();
+    dsmst
+        .add_branch(proof5, b"testKey5", DEFAULT_VALUE)
+        .unwrap();
+
+    let val = dsmst.get(b"testKey1").unwrap().unwrap();
+    assert_eq!(val, Bytes::from("testValue1"));
+
+    let val = dsmst.get_descend(b"testKey1").unwrap().unwrap();
+    assert_eq!(val, Bytes::from("testValue1"));
+
+    let val = dsmst.get(b"testKey2").unwrap().unwrap();
+    assert_eq!(val, Bytes::from("testValue2"));
+
+    let val = dsmst.get_descend(b"testKey2").unwrap().unwrap();
+    assert_eq!(val, Bytes::from("testValue2"));
+
+    let val = dsmst.get(b"testKey5").unwrap();
+    assert!(val.is_none());
+
+    let val = dsmst.get_descend(b"testKey5").unwrap();
+    assert!(val.is_none());
+
+    assert!(dsmst.get_descend(b"testKey6").unwrap().is_none());
+
+    dsmst
+        .update(b"testKey1", Bytes::from("testValue3"))
+        .unwrap();
+    dsmst.update(b"testKey2", Bytes::new()).unwrap();
+    dsmst
+        .update(b"testKey5", Bytes::from("testValue5"))
+        .unwrap();
+
+    let val = dsmst.get(b"testKey1").unwrap().unwrap();
+    assert_eq!(val, Bytes::from("testValue3"));
+
+    let val = dsmst.get(b"testKey2").unwrap();
+    assert!(val.is_none());
+
+    let val = dsmst.get(b"testKey5").unwrap().unwrap();
+    assert_eq!(val, Bytes::from("testValue5"));
+
+    smt.update(b"testKey1", Bytes::from("testValue3")).unwrap();
+    smt.update(b"testKey2", DEFAULT_VALUE).unwrap();
+    smt.update(b"testKey5", Bytes::from("testValue5")).unwrap();
+    assert_eq!(smt.root(), dsmst.root());
+    assert_ne!(smt.root(), original_root);
+}
+
+#[test]
+fn test_deep_sparse_merkle_sub_tree_bad_input() {
+    let mut smt = new_sparse_merkle_tree();
+
+    smt.update(b"testKey1", Bytes::from("testValue1")).unwrap();
+    smt.update(b"testKey2", Bytes::from("testValue2")).unwrap();
+    smt.update(b"testKey3", Bytes::from("testValue3")).unwrap();
+    smt.update(b"testKey4", Bytes::from("testValue4")).unwrap();
+
+    let mut bad_proof = smt.prove(b"testKey1").unwrap();
+    let mut vec = vec![0; bad_proof.side_nodes[0].len()];
+    vec[1..].copy_from_slice(bad_proof.side_nodes[0][1..].as_ref());
+    bad_proof.side_nodes[0] = vec.into();
+
+    let dsmst = SparseMerkleTree::import(SimpleStore::new(), SimpleStore::new(), smt.root());
+    dsmst
+        .add_branch(bad_proof, b"testKey1", Bytes::from("testValue1"))
+        .unwrap_err();
 }
