@@ -3,8 +3,8 @@ use std::sync::Arc;
 use bytes::Bytes;
 use criterion::*;
 use hashbrown::HashMap;
-use parking_lot::Mutex;
 use lsmt::{BadProof, KVStore, SparseMerkleTree};
+use parking_lot::Mutex;
 
 #[derive(Debug)]
 pub enum Error {
