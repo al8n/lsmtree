@@ -38,9 +38,9 @@ pub trait KVStore {
     /// Gets the value for a key. If not exists, returns `Ok(None)`.
     fn get(&self, key: &[u8]) -> Result<Option<Bytes>, Self::Error>;
     /// Updates the value for a key.
-    fn set(&self, key: Bytes, value: Bytes) -> Result<(), Self::Error>;
+    fn set(&mut self, key: Bytes, value: Bytes) -> Result<(), Self::Error>;
     /// Remove value by key.
-    fn remove(&self, key: &[u8]) -> Result<Bytes, Self::Error>;
+    fn remove(&mut self, key: &[u8]) -> Result<Bytes, Self::Error>;
     /// Returns if key exists in the store.
     fn contains(&self, key: &[u8]) -> Result<bool, Self::Error>;
 }

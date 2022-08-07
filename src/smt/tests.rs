@@ -1,11 +1,9 @@
-use alloc::sync::Arc;
 use digest::generic_array::GenericArray;
 use hashbrown::HashMap;
 
 use crate::proofs::BadProof;
 
 use super::*;
-use parking_lot::Mutex;
 
 #[derive(Debug)]
 pub enum Error {
@@ -30,13 +28,13 @@ impl std::error::Error for Error {}
 
 #[derive(Debug, Clone, Default)]
 pub struct SimpleStore {
-    data: Arc<Mutex<HashMap<Bytes, Bytes>>>,
+    data: HashMap<Bytes, Bytes>,
 }
 
 impl SimpleStore {
     pub fn new() -> Self {
         Self {
-            data: Arc::new(Mutex::new(HashMap::new())),
+            data: HashMap::new(),
         }
     }
 }
@@ -46,35 +44,32 @@ impl KVStore for SimpleStore {
     type Hasher = sha2::Sha256;
 
     fn get(&self, key: &[u8]) -> Result<Option<Bytes>, Self::Error> {
-        let data = self.data.lock();
-        Ok(data.get(key).map(core::clone::Clone::clone))
+        Ok(self.data.get(key).map(core::clone::Clone::clone))
     }
 
-    fn set(&self, key: Bytes, value: Bytes) -> Result<(), Self::Error> {
-        let mut data = self.data.lock();
-        data.insert(key, value);
+    fn set(&mut self, key: Bytes, value: Bytes) -> Result<(), Self::Error> {
+        self.data.insert(key, value);
         Ok(())
     }
 
-    fn remove(&self, key: &[u8]) -> Result<Bytes, Self::Error> {
-        let mut data = self.data.lock();
-        data.remove(key).ok_or(Error::NotFound)
+    fn remove(&mut self, key: &[u8]) -> Result<Bytes, Self::Error> {
+        self.data.remove(key).ok_or(Error::NotFound)
     }
 
     fn contains(&self, key: &[u8]) -> Result<bool, Self::Error> {
-        Ok(self.data.lock().contains_key(key))
+        Ok(self.data.contains_key(key))
     }
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct DummyStore {
-    data: Arc<Mutex<HashMap<Bytes, Bytes>>>,
+    data: HashMap<Bytes, Bytes>,
 }
 
 impl DummyStore {
     pub fn new() -> Self {
         Self {
-            data: Arc::new(Mutex::new(HashMap::new())),
+            data: HashMap::new(),
         }
     }
 }
@@ -84,23 +79,20 @@ impl KVStore for DummyStore {
     type Hasher = DummyHasher<sha2::Sha256>;
 
     fn get(&self, key: &[u8]) -> Result<Option<Bytes>, Self::Error> {
-        let data = self.data.lock();
-        Ok(data.get(key).map(core::clone::Clone::clone))
+        Ok(self.data.get(key).map(core::clone::Clone::clone))
     }
 
-    fn set(&self, key: Bytes, value: Bytes) -> Result<(), Self::Error> {
-        let mut data = self.data.lock();
-        data.insert(key, value);
+    fn set(&mut self, key: Bytes, value: Bytes) -> Result<(), Self::Error> {
+        self.data.insert(key, value);
         Ok(())
     }
 
-    fn remove(&self, key: &[u8]) -> Result<Bytes, Self::Error> {
-        let mut data = self.data.lock();
-        data.remove(key).ok_or(Error::NotFound)
+    fn remove(&mut self, key: &[u8]) -> Result<Bytes, Self::Error> {
+        self.data.remove(key).ok_or(Error::NotFound)
     }
 
     fn contains(&self, key: &[u8]) -> Result<bool, Self::Error> {
-        Ok(self.data.lock().contains_key(key))
+        Ok(self.data.contains_key(key))
     }
 }
 
@@ -346,7 +338,7 @@ fn test_sparse_merkle_tree_known() {
     let proof4 = smt.prove(&key4).unwrap();
     let proof5 = smt.prove(&key5).unwrap();
 
-    let dsmst =
+    let mut dsmst =
         SparseMerkleTree::<DummyStore>::import(DummyStore::new(), DummyStore::new(), smt.root());
     dsmst
         .add_branch(proof1, &key1, Bytes::from("testValue1"))
@@ -481,7 +473,7 @@ fn test_deep_sparse_merkle_sub_tree_bad_input() {
     vec[1..].copy_from_slice(bad_proof.side_nodes[0][1..].as_ref());
     bad_proof.side_nodes[0] = vec.into();
 
-    let dsmst = SparseMerkleTree::import(SimpleStore::new(), SimpleStore::new(), smt.root());
+    let mut dsmst = SparseMerkleTree::import(SimpleStore::new(), SimpleStore::new(), smt.root());
     dsmst
         .add_branch(bad_proof, b"testKey1", Bytes::from("testValue1"))
         .unwrap_err();

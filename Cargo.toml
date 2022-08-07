@@ -1,6 +1,6 @@
 [package]
 name = "lsmtree"
-version = "0.0.7"
+version = "0.0.8"
 edition = "2021"
 repository = "https://github.com/al8n/lsmtree"
 description = "Implements a Sparse Merkle tree for a key-value store. The tree implements the same optimisations specified in the libra whitepaper, to reduce the number of hash operations required per tree operation to O(k) where k is the number of non-empty elements in the tree."
@@ -30,6 +30,9 @@ std = ["bytes/default"]
 [dependencies]
 bytes = { version = "1.2", default-features = false }
 digest = "0.10"
+
+# [target.'cfg(target_arch = "aarch64")'.dev-dependencies]
+# sha2 = { version = "0.10", features = ["asm-aarch64"]}
 
 [dev-dependencies]
 criterion = "0.3"

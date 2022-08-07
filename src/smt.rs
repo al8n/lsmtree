@@ -450,7 +450,7 @@ impl<S: KVStore> SparseMerkleTree<S> {
     /// If the leaf may be updated (e.g. during a state transition fraud proof),
     /// an updatable proof should be used. See SparseMerkleTree.ProveUpdatable.
     pub fn add_branch(
-        &self,
+        &mut self,
         proof: SparseMerkleProof<S::Hasher>,
         key: impl AsRef<[u8]>,
         val: impl Into<Bytes> + AsRef<[u8]>,
