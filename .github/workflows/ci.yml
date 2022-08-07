@@ -187,19 +187,9 @@ jobs:
     name: miri
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - name: Install Rust ${{ env.rust_nightly }}
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: ${{ env.rust_nightly }}
-          components: miri
-          override: true
-      - uses: Swatinem/rust-cache@v1
-      - name: miri
-        run: cargo miri test --all-features --lib
-        env:
-          MIRIFLAGS: -Zmiri-disable-isolation -Zmiri-tag-raw-pointers -Zmiri-allow-communication
-          PROPTEST_CASES: 10
+      - uses: actions/checkout@v3
+      - name: Miri
+        run: ci/miri.sh
 
   tarpaulin:
     name: cargo tarpaulin
