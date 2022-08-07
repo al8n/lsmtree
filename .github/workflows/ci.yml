@@ -130,7 +130,7 @@ jobs:
       - name: cargo build --target ${{ matrix.target }}
         run: |
           rustup target add ${{ matrix.target }}
-          cargo build --features js --target ${{ matrix.target }}
+          cargo build --target ${{ matrix.target }}
         if: matrix.target == 'wasm32-unknown-unknown'
 
   # Sanitizers
@@ -198,7 +198,7 @@ jobs:
       - name: miri
         run: cargo miri test --all-features --lib
         env:
-          MIRIFLAGS: -Zmiri-disable-isolation -Zmiri-tag-raw-pointers
+          MIRIFLAGS: -Zmiri-disable-isolation -Zmiri-tag-raw-pointers -Zmiri-allow-communication
           PROPTEST_CASES: 10
 
   tarpaulin:
