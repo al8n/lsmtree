@@ -1,6 +1,6 @@
 # UNRELEASED
 
-# 0.0.* (Aug 7th, 2022)
+# 0.1.0 (Aug 7th, 2022)
 
 FEATURES
 

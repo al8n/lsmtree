@@ -479,6 +479,7 @@ fn test_deep_sparse_merkle_sub_tree_bad_input() {
         .unwrap_err();
 }
 
+// TODO: implement this test
 #[test]
 fn test_orphan_removal() {}
 
