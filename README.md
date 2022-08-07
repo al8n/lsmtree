@@ -3,7 +3,7 @@
 </div>
 <div align="center">
 
-A Rust library that implements a Sparse Merkle tree for a key-value map. The tree implements the same optimisations specified in the [Libra whitepaper][libra whitepaper], to reduce the number of hash operations required per tree operation to O(k) where k is the number of non-empty elements in the tree.
+A Rust library that implements a Sparse Merkle tree for a key-value store. The tree implements the same optimisations specified in the [Libra whitepaper][libra whitepaper], to reduce the number of hash operations required per tree operation to O(k) where k is the number of non-empty elements in the tree.
 
 [<img alt="github" src="https://img.shields.io/badge/github-lsmtree-8da0cb?style=for-the-badge&logo=Github" height="22">][Github-url]
 [<img alt="Build" src="https://img.shields.io/github/workflow/status/al8n/lsmtree/CI/main?logo=Github-Actions&style=for-the-badge" height="22">][CI-url]
@@ -28,7 +28,7 @@ English | [简体中文][zh-cn-url]
 - Internal implementation uses shallow copy, which powered by [`bytes::Bytes`](https://crates.io/crates/bytes).
 - Performance almost depends on the cryptographic crate, e.g. `sha2`.
 - Adaptable with [RustCrypto's crates](https://github.com/RustCrypto). All cryptographic structs which implement [`digest::Digest`](https://docs.rs/digest/latest/digest/trait.Digest.html) trait are adaptable with this crate.
-- Easily to compitable any other cryptographic crates. When you want to use a cryptographic crate which does not implement [`digest::Digest`](https://docs.rs/digest/latest/digest/trait.Digest.html) trait, you actually do not need to fully implement [`digest::Digest`](https://docs.rs/digest/latest/digest/trait.Digest.html) trait.
+- Easily compactable with any other cryptographic crates. When you want to use a cryptographic crate which does not implement [`digest::Digest`](https://docs.rs/digest/latest/digest/trait.Digest.html) trait, you actually do not need to fully implement [`digest::Digest`](https://docs.rs/digest/latest/digest/trait.Digest.html) trait.
   
     e.g. only need to implement 5 methods (`new`, `update`, `digest`, `output_size`, `finalize`, actually only 3 methods) and just leave other methods `unreachable!()`.
     
