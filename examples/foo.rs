@@ -1,7 +1,7 @@
-use lsmtree::{SparseMerkleTree, KVStore, bytes::Bytes, BadProof};
+use lsmtree::{bytes::Bytes, BadProof, KVStore, SparseMerkleTree};
 use parking_lot::Mutex;
-use std::{collections::HashMap, sync::Arc};
 use sha2::Sha256;
+use std::{collections::HashMap, sync::Arc};
 
 #[derive(Debug)]
 pub enum Error {
@@ -70,7 +70,7 @@ fn main() {
     // get
     assert_eq!(smt.get(b"key1").unwrap(), Some(Bytes::from("val1")));
 
-    // prove 
+    // prove
     let proof = smt.prove(b"key1").unwrap();
     assert!(proof.verify(smt.root_ref(), b"key1", b"val1"));
 }

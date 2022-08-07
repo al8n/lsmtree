@@ -1,5 +1,5 @@
 //! A Rust library that implements a Sparse Merkle tree for a key-value map. The tree implements the same optimisations specified in the [Libra whitepaper][libra whitepaper], to reduce the number of hash operations required per tree operation to O(k) where k is the number of non-empty elements in the tree.
-//! 
+//!
 //! [libra whitepaper]: https://libra.org/docs/libra-whitepaper.pdf
 #![cfg_attr(not(feature = "std"), no_std)]
 #![cfg_attr(docsrs, feature(doc_cfg))]

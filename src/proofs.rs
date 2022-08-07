@@ -6,8 +6,9 @@ use super::{
     smt::{DEFAULT_VALUE, RIGHT},
     tree_hasher::{TreeHasher, LEAF_PREFIX},
 };
+use alloc::{vec, vec::Vec};
 use bytes::Bytes;
-use core::{marker::PhantomData, ops::Div};
+use core::marker::PhantomData;
 use digest::Digest;
 
 /// Returned when an invalid Merkle proof is supplied.
@@ -98,7 +99,7 @@ impl<H: digest::Digest> SparseMerkleProof<H> {
             return Err(BadProof);
         }
 
-        let mut bit_mask = vec![0u8; (self.side_nodes.len() as f64).div(8.0).ceil() as usize];
+        let mut bit_mask = vec![0u8; ((self.side_nodes.len() as f64) / 8.0).ceil() as usize];
 
         let compacted_side_nodes = self
             .side_nodes
@@ -140,7 +141,7 @@ impl<H: digest::Digest> SparseMerkleProof<H> {
             sibling_data,
             _marker: _,
         } = self;
-        let mut bit_mask = vec![0u8; (num_side_nodes as f64).div(8.0).ceil() as usize];
+        let mut bit_mask = vec![0u8; ((num_side_nodes as f64) / 8.0).ceil() as usize];
 
         let compacted_side_nodes = side_nodes
             .into_iter()
