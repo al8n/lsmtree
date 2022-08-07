@@ -1,7 +1,6 @@
 use alloc::sync::Arc;
 use digest::generic_array::GenericArray;
 use hashbrown::HashMap;
-use rand::{Rng, RngCore};
 
 use crate::proofs::BadProof;
 
@@ -36,10 +35,10 @@ pub struct SimpleStore {
 impl core::fmt::Display for SimpleStore {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         let data = self.data.lock();
-        writeln!(f, "length: {}", data.len());
+        writeln!(f, "length: {}", data.len())?;
         for (key, value) in data.iter() {
             writeln!(f, "{:?} => {:?}", key.as_ref(), value.as_ref())?;
-            writeln!(f, "")?;
+            writeln!(f)?;
         }
         Ok(())
     }
@@ -86,10 +85,10 @@ pub struct DummyStore {
 impl core::fmt::Display for DummyStore {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         let data = self.data.lock();
-        writeln!(f, "length: {}", data.len());
+        writeln!(f, "length: {}", data.len())?;
         for (key, value) in data.iter() {
             writeln!(f, "{:?} => {:?}", key.as_ref(), value.as_ref())?;
-            writeln!(f, "")?;
+            writeln!(f)?;
         }
         Ok(())
     }
@@ -159,7 +158,7 @@ impl<D: digest::Digest + digest::OutputSizeUser> digest::Digest for DummyHasher<
         }
     }
 
-    fn new_with_prefix(data: impl AsRef<[u8]>) -> Self {
+    fn new_with_prefix(_data: impl AsRef<[u8]>) -> Self {
         todo!()
     }
 
@@ -167,7 +166,7 @@ impl<D: digest::Digest + digest::OutputSizeUser> digest::Digest for DummyHasher<
         self.data.extend_from_slice(data.as_ref());
     }
 
-    fn chain_update(self, data: impl AsRef<[u8]>) -> Self {
+    fn chain_update(self, _data: impl AsRef<[u8]>) -> Self {
         todo!()
     }
 
@@ -189,7 +188,7 @@ impl<D: digest::Digest + digest::OutputSizeUser> digest::Digest for DummyHasher<
         }
     }
 
-    fn finalize_into(self, out: &mut digest::Output<Self>) {
+    fn finalize_into(self, _out: &mut digest::Output<Self>) {
         todo!()
     }
 
@@ -200,7 +199,7 @@ impl<D: digest::Digest + digest::OutputSizeUser> digest::Digest for DummyHasher<
         todo!()
     }
 
-    fn finalize_into_reset(&mut self, out: &mut digest::Output<Self>)
+    fn finalize_into_reset(&mut self, _out: &mut digest::Output<Self>)
     where
         Self: digest::FixedOutputReset,
     {

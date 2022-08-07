@@ -1,9 +1,12 @@
+//! A Rust library that implements a Sparse Merkle tree for a key-value map. The tree implements the same optimisations specified in the [Libra whitepaper][libra whitepaper], to reduce the number of hash operations required per tree operation to O(k) where k is the number of non-empty elements in the tree.
+//! 
+//! [libra whitepaper]: https://libra.org/docs/libra-whitepaper.pdf
 #![cfg_attr(not(feature = "std"), no_std)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(docsrs, allow(unused_attributes))]
+#![deny(missing_docs)]
 #![allow(clippy::declare_interior_mutable_const)]
 #![allow(clippy::borrow_interior_mutable_const)]
-
 extern crate alloc;
 mod smt;
 #[cfg(test)]
@@ -20,11 +23,14 @@ pub use proofs::*;
 
 /// Key-Value store
 pub trait KVStore {
+    /// The hasher to use for the underlying tree.
     type Hasher: digest::Digest;
 
+    /// The Error type
     #[cfg(not(feature = "std"))]
     type Error: core::fmt::Debug + core::fmt::Display + From<BadProof>;
 
+    /// The Error type
     #[cfg(feature = "std")]
     type Error: std::error::Error + From<BadProof>;
 

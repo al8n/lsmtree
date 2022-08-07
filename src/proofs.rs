@@ -60,16 +60,19 @@ impl<H> SparseMerkleProof<H> {
         }
     }
 
+    /// Get the sibling data for this proof
     #[inline]
     pub fn sibling_data(&self) -> Option<&Bytes> {
         self.sibling_data.as_ref()
     }
 
+    /// get the non-membership leaf data for this proof
     #[inline]
     pub fn non_membership_leaf_data(&self) -> Option<&Bytes> {
         self.non_membership_leaf_data.as_ref()
     }
 
+    /// get the side nodes for this proof
     #[inline]
     pub fn side_nodes(&self) -> &[Bytes] {
         &self.side_nodes
@@ -260,9 +263,6 @@ impl<H: digest::Digest> SparseMerkleProof<H> {
 
         // Recompute root.
         let num = self.side_nodes.len();
-        // for i in 0..num {
-        //     self.side_nodes[i].
-        // }
         self.side_nodes
             .iter()
             .enumerate()
@@ -374,21 +374,25 @@ impl<H> SparseCompactMerkleProof<H> {
         }
     }
 
+    /// Get the sibility of for this proof
     #[inline]
     pub fn sibling_data(&self) -> Option<&Bytes> {
         self.sibling_data.as_ref()
     }
 
+    /// Get the non-membership leaf data for this proof
     #[inline]
     pub fn non_membership_leaf_data(&self) -> Option<&Bytes> {
         self.non_membership_leaf_data.as_ref()
     }
 
+    /// Get the original number of side nodes
     #[inline]
     pub fn original_side_nodes_len(&self) -> usize {
         self.num_side_nodes
     }
 
+    /// Get the side nodes for this compacted proof
     #[inline]
     pub fn side_nodes(&self) -> &[Bytes] {
         &self.side_nodes
@@ -418,6 +422,7 @@ impl<H: digest::Digest> SparseCompactMerkleProof<H> {
         true
     }
 
+    /// Verifies a Merkle proof
     pub fn verify(
         &self,
         root: impl AsRef<[u8]>,

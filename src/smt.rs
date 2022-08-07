@@ -512,7 +512,7 @@ impl<S: KVStore> SparseMerkleTree<S> {
         self.do_prove_for_root(key, root, false)
     }
 
-    // Generates an updatable Merkle proof for a key against the current root.
+    /// Generates an updatable Merkle proof for a key against the current root.
     pub fn prove_updatable(
         &self,
         key: impl AsRef<[u8]>,
@@ -520,8 +520,8 @@ impl<S: KVStore> SparseMerkleTree<S> {
         self.prove_updatable_for_root(key, self.root())
     }
 
-    // Generates an updatable Merkle proof for a key, against a specific node.
-    // This is primarily useful for generating Merkle proofs for subtrees.
+    /// Generates an updatable Merkle proof for a key, against a specific node.
+    /// This is primarily useful for generating Merkle proofs for subtrees.
     pub fn prove_updatable_for_root(
         &self,
         key: impl AsRef<[u8]>,
