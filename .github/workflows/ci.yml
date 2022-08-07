@@ -25,7 +25,7 @@ env:
   CARGO_TERM_COLOR: always
   # RUSTFLAGS: -Dwarnings
   RUST_BACKTRACE: 1
-  nightly: nightly-2022-06-27
+  nightly: nightly-2022-07-13
   stable: stable
 
 defaults:
