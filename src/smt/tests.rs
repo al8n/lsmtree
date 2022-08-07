@@ -1,5 +1,7 @@
 use alloc::sync::Arc;
+use digest::generic_array::GenericArray;
 use hashbrown::HashMap;
+use rand::{Rng, RngCore};
 
 use crate::proofs::BadProof;
 
@@ -76,12 +78,62 @@ impl KVStore for SimpleStore {
     }
 }
 
-pub fn new_sparse_merkle_tree() -> SparseMerkleTree<SimpleStore> {
-    let (smn, smv) = (SimpleStore::new(), SimpleStore::new());
-    SparseMerkleTree::<SimpleStore>::new(smn, smv)
+#[derive(Debug, Clone, Default)]
+pub struct DummyStore {
+    data: Arc<Mutex<HashMap<Bytes, Bytes>>>,
 }
 
-struct DummyHasher<D: digest::Digest + digest::OutputSizeUser> {
+impl core::fmt::Display for DummyStore {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        let data = self.data.lock();
+        writeln!(f, "length: {}", data.len());
+        for (key, value) in data.iter() {
+            writeln!(f, "{:?} => {:?}", key.as_ref(), value.as_ref())?;
+            writeln!(f, "")?;
+        }
+        Ok(())
+    }
+}
+
+impl DummyStore {
+    pub fn new() -> Self {
+        Self {
+            data: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+}
+
+impl KVStore for DummyStore {
+    type Error = Error;
+    type Hasher = DummyHasher<sha2::Sha256>;
+
+    fn get(&self, key: &[u8]) -> Result<Option<Bytes>, Self::Error> {
+        let data = self.data.lock();
+        Ok(data.get(key).map(core::clone::Clone::clone))
+    }
+
+    fn set(&self, key: Bytes, value: Bytes) -> Result<(), Self::Error> {
+        let mut data = self.data.lock();
+        data.insert(key, value);
+        Ok(())
+    }
+
+    fn remove(&self, key: &[u8]) -> Result<Bytes, Self::Error> {
+        let mut data = self.data.lock();
+        data.remove(key).ok_or(Error::NotFound)
+    }
+
+    fn contains(&self, key: &[u8]) -> Result<bool, Self::Error> {
+        Ok(self.data.lock().contains_key(key))
+    }
+}
+
+pub fn new_sparse_merkle_tree() -> SparseMerkleTree<SimpleStore> {
+    let (smn, smv) = (SimpleStore::new(), SimpleStore::new());
+    SparseMerkleTree::<SimpleStore>::new_with_stores(smn, smv)
+}
+
+pub struct DummyHasher<D: digest::Digest + digest::OutputSizeUser> {
     base_hasher: D,
     data: Vec<u8>,
 }
@@ -112,15 +164,29 @@ impl<D: digest::Digest + digest::OutputSizeUser> digest::Digest for DummyHasher<
     }
 
     fn update(&mut self, data: impl AsRef<[u8]>) {
-        self.data.extend(data.as_ref());
+        self.data.extend_from_slice(data.as_ref());
     }
 
     fn chain_update(self, data: impl AsRef<[u8]>) -> Self {
         todo!()
     }
 
-    fn finalize(self) -> digest::Output<Self> {
-        todo!()
+    fn finalize(mut self) -> digest::Output<Self> {
+        let mut prefix = vec![];
+        let mut preimage = self.data.clone();
+        prefix.extend(preimage.iter());
+        preimage = prefix;
+
+        if preimage.len() >= 4
+            && preimage[..4].eq(&[0, 0, 0, 0])
+            && preimage.len() == <D as digest::Digest>::output_size() + 4
+        {
+            let digest = preimage[4..].to_vec();
+            GenericArray::from_iter(digest)
+        } else {
+            self.base_hasher.update(preimage);
+            self.base_hasher.finalize()
+        }
     }
 
     fn finalize_into(self, out: &mut digest::Output<Self>) {
@@ -153,7 +219,9 @@ impl<D: digest::Digest + digest::OutputSizeUser> digest::Digest for DummyHasher<
     }
 
     fn digest(data: impl AsRef<[u8]>) -> digest::Output<Self> {
-        todo!()
+        let mut x = Self::new();
+        x.update(data);
+        x.finalize()
     }
 }
 
@@ -254,16 +322,101 @@ fn test_smt_remove_basic() {
 }
 
 #[test]
-fn test_sparse_merkle_tree_known() {}
+fn test_sparse_merkle_tree_known() {
+    let (smn, smv) = (DummyStore::new(), DummyStore::new());
+    let mut smt = SparseMerkleTree::<DummyStore>::new_with_stores(smn, smv);
+
+    const SIZE: usize = 36;
+
+    let key1: Bytes = vec![0; SIZE].into();
+
+    let key2: Bytes = {
+        let mut key2 = vec![0; SIZE];
+        key2[4] = 0b0100_0000;
+        key2.into()
+    };
+
+    let key3 = {
+        let mut key3 = vec![0; SIZE];
+        key3[4] = 0b1000_0000;
+        Bytes::from(key3)
+    };
+    let key4 = {
+        let mut key4 = vec![0; SIZE];
+        key4[4] = 0b1100_0000;
+        Bytes::from(key4)
+    };
+    let key5 = {
+        let mut key5 = vec![0; SIZE];
+        key5[4] = 0b1101_0000;
+        Bytes::from(key5)
+    };
+
+    smt.update(&key1, Bytes::from("testValue1")).unwrap();
+    smt.update(&key2, Bytes::from("testValue2")).unwrap();
+    smt.update(&key3, Bytes::from("testValue3")).unwrap();
+    smt.update(&key4, Bytes::from("testValue4")).unwrap();
+    smt.update(&key5, Bytes::from("testValue5")).unwrap();
+
+    assert_eq!(smt.get(&key1).unwrap(), Some(Bytes::from("testValue1")));
+    assert_eq!(smt.get(&key2).unwrap(), Some(Bytes::from("testValue2")));
+    assert_eq!(smt.get(&key3).unwrap(), Some(Bytes::from("testValue3")));
+    assert_eq!(smt.get(&key4).unwrap(), Some(Bytes::from("testValue4")));
+    assert_eq!(smt.get(&key5).unwrap(), Some(Bytes::from("testValue5")));
+
+    let proof1 = smt.prove(&key1).unwrap();
+    let proof2 = smt.prove(&key2).unwrap();
+    let proof3 = smt.prove(&key3).unwrap();
+    let proof4 = smt.prove(&key4).unwrap();
+    let proof5 = smt.prove(&key5).unwrap();
+
+    let dsmst =
+        SparseMerkleTree::<DummyStore>::import(DummyStore::new(), DummyStore::new(), smt.root());
+    dsmst
+        .add_branch(proof1, &key1, Bytes::from("testValue1"))
+        .unwrap();
+    dsmst
+        .add_branch(proof2, &key2, Bytes::from("testValue2"))
+        .unwrap();
+    dsmst
+        .add_branch(proof3, &key3, Bytes::from("testValue3"))
+        .unwrap();
+    dsmst
+        .add_branch(proof4, &key4, Bytes::from("testValue4"))
+        .unwrap();
+    dsmst
+        .add_branch(proof5, &key5, Bytes::from("testValue5"))
+        .unwrap();
+}
 
 #[test]
 fn test_sparse_merkle_tree_max_height_case() {
-    let _smt = new_sparse_merkle_tree();
+    const SIZE: usize = 36;
+
+    let (smn, smv) = (DummyStore::new(), DummyStore::new());
+    let mut smt = SparseMerkleTree::<DummyStore>::new_with_stores(smn, smv);
+
     // Make two neighboring keys.
     //
     // The dummy hash function expects keys to prefixed with four bytes of 0,
     // which will cause it to return the preimage itself as the digest, without
     // the first four bytes.
+    let key1 = Bytes::from(vec![0; SIZE]);
+    let key2: Bytes = {
+        let mut key2 = vec![0; SIZE];
+        // We make key2's least significant bit different than key1's
+        key2[SIZE - 1] = 1;
+        key2.into()
+    };
+
+    smt.update(&key1, Bytes::from("testValue1")).unwrap();
+    smt.update(&key2, Bytes::from("testValue2")).unwrap();
+
+    assert_eq!(smt.get(&key1).unwrap(), Some(Bytes::from("testValue1")));
+    assert_eq!(smt.get(&key2).unwrap(), Some(Bytes::from("testValue2")));
+
+    let proof1 = smt.prove(&key1).unwrap();
+    assert_eq!(proof1.side_nodes().len(), 256);
 }
 
 #[test]
@@ -357,3 +510,124 @@ fn test_deep_sparse_merkle_sub_tree_bad_input() {
         .add_branch(bad_proof, b"testKey1", Bytes::from("testValue1"))
         .unwrap_err();
 }
+
+#[test]
+fn test_orphan_removal() {}
+
+// // Test all tree operations in bulk.
+// #[test]
+// fn test_sparse_merkle_tree() {
+//     for i in 0..5 {
+//         eprintln!("{}: {} {} {} {}", i, 200, 100, 100, 50);
+//         bulk_operations(200, 100, 100, 50);
+//     }
+
+//     for i in 0..5 {
+//         eprintln!("{}: {} {} {} {}", i, 200, 100, 100, 500);
+//         bulk_operations(200, 100, 100, 500);
+//     }
+// }
+
+// fn bulk_operations(operations: usize, insert: usize, update: usize, remove: usize) {
+//     let mut smt = new_sparse_merkle_tree();
+//     let max = insert + update + remove;
+
+//     let mut kv = hashbrown::HashMap::new();
+//     let mut rng = rand::thread_rng();
+//     for _ in 0..operations {
+//         let n = rng.gen_range(0..max);
+//         if n < insert {
+//             // insert
+//             let key_len = 16 + rng.gen_range(0..32);
+//             let mut key = vec![0; key_len];
+//             rng.fill_bytes(key.as_mut_slice());
+
+//             let val_len = 1 + rng.gen_range(0..64);
+//             let mut val = vec![0; val_len];
+//             rng.fill_bytes(val.as_mut_slice());
+//             let val = Bytes::from(val);
+//             smt.update(key.as_slice(), val.clone()).unwrap();
+
+//             kv.insert(Bytes::from(key), val);
+//         } else if n > insert && n < insert + update {
+//             // update
+//             let keys = kv.keys().cloned().collect::<Vec<_>>();
+//             if keys.is_empty() {
+//                 continue;
+//             }
+
+//             let key = keys[rng.gen_range(0..keys.len())].clone();
+//             let val_len = 1 + rng.gen_range(0..64);
+//             let mut val = vec![0; val_len];
+//             rng.fill_bytes(val.as_mut_slice());
+
+//             let val = Bytes::from(val);
+
+//             smt.update(&key, val.clone()).unwrap();
+//             kv.insert(key, val);
+//         } else {
+//             // delete
+//             let keys = kv.keys().cloned().collect::<Vec<_>>();
+//             if keys.is_empty() {
+//                 continue;
+//             }
+//             let key = keys[rng.gen_range(0..keys.len())].clone();
+//             smt.update(&key, DEFAULT_VALUE).unwrap();
+//             kv.insert(key, DEFAULT_VALUE);
+//         }
+
+//         bulk_check_all(&smt, &kv);
+//     }
+// }
+
+// fn bulk_check_all<S: KVStore>(smt: &SparseMerkleTree<S>, kv: &hashbrown::HashMap<Bytes, Bytes>) {
+//     for (k, v) in kv {
+//         assert!(smt.get(k).unwrap().unwrap_or(DEFAULT_VALUE).eq(v));
+
+//         // Generate and verify a Merkle proof for this key.
+//         let proof = smt.prove(k).unwrap();
+//         assert!(proof.verify(smt.root(), k, v));
+//         let compact = smt.prove_compact(k).unwrap();
+//         assert!(compact.verify(smt.root(), k, v));
+
+//         if v.eq(&DEFAULT_VALUE) {
+//             continue;
+//         }
+
+//         // Check that the key is at the correct height in the tree.
+//         let mut largest_common_prefix = 0;
+//         for (k2, v2) in kv {
+//             if v2.eq(&DEFAULT_VALUE) {
+//                 continue;
+//             }
+
+//             let common_prefix =
+//                 count_common_prefix(smt.th.path(k).as_ref(), smt.th.path(k2).as_ref());
+//             if common_prefix == smt.depth() && common_prefix > largest_common_prefix {
+//                 largest_common_prefix = common_prefix;
+//             }
+//         }
+
+//         let UpdateResult {
+//             side_nodes,
+//             path_nodes: _,
+//             sibling_data: _,
+//             current_data: _,
+//         } = smt
+//             .side_nodes_for_root(smt.th.path(k).as_ref(), smt.root(), false)
+//             .unwrap();
+
+//         let mut num_side_nodes = 0;
+//         for node in side_nodes {
+//             if !node.is_empty() {
+//                 num_side_nodes += 1;
+//             }
+//         }
+
+//         if num_side_nodes != largest_common_prefix + 1
+//             && (num_side_nodes != 0 && largest_common_prefix != 0)
+//         {
+//             panic!("leaf is at unexpected height");
+//         }
+//     }
+// }

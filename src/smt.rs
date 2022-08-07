@@ -22,33 +22,52 @@ pub struct SparseMerkleTree<S: KVStore> {
     root: Bytes,
 }
 
-impl<S: KVStore> SparseMerkleTree<S> {
-    pub fn nodes(&self) -> &S {
-        &self.nodes
+impl<S: KVStore + core::fmt::Debug> core::fmt::Debug for SparseMerkleTree<S> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct(core::any::type_name::<Self>())
+            .field("nodes", &self.nodes)
+            .field("values", &self.values)
+            .field("root", &self.root().as_ref())
+            .field("tree_hasher", &self.th)
+            .finish()
     }
+}
 
-    pub fn values(&self) -> &S {
-        &self.values
+impl<S: KVStore + Default> Default for SparseMerkleTree<S> {
+    fn default() -> Self {
+        let th = TreeHasher::new(vec![0; TreeHasher::<S::Hasher>::path_size()].into());
+        let root = th.placeholder();
+        Self {
+            th,
+            nodes: S::default(),
+            values: S::default(),
+            root,
+        }
     }
+}
 
-    #[inline]
-    pub fn root(&self) -> Bytes {
-        self.root.clone()
+impl<S: KVStore + Clone> Clone for SparseMerkleTree<S> {
+    fn clone(&self) -> Self {
+        Self {
+            th: self.th.clone(),
+            nodes: self.nodes.clone(),
+            values: self.values.clone(),
+            root: self.root.clone(),
+        }
     }
+}
 
-    #[inline]
-    pub fn root_ref(&self) -> &[u8] {
-        &self.root
-    }
-
-    #[inline]
-    pub fn set_root(&mut self, root: Bytes) {
-        self.root = root;
+impl<S: KVStore + Default> SparseMerkleTree<S> {
+    /// Create a new sparse merkle tree
+    pub fn new() -> Self {
+        Self::default()
     }
 }
 
 impl<S: KVStore> SparseMerkleTree<S> {
-    pub fn new(nodes_store: S, values_store: S) -> Self {
+    /// Create a sparse merkle tree based on the given stores
+    #[inline]
+    pub fn new_with_stores(nodes_store: S, values_store: S) -> Self {
         let th = TreeHasher::new(vec![0; TreeHasher::<S::Hasher>::path_size()].into());
         let root = th.placeholder();
         Self {
@@ -59,7 +78,8 @@ impl<S: KVStore> SparseMerkleTree<S> {
         }
     }
 
-    /// Imports a Sparse Merkle tree from a non-empty KVStore.
+    /// Imports a Sparse Merkle tree from non-empty `KVStore`.
+    #[inline]
     pub fn import(nodes_store: S, values_store: S, root: impl Into<Bytes>) -> Self {
         Self {
             th: TreeHasher::new(vec![0; TreeHasher::<S::Hasher>::path_size()].into()),
@@ -69,13 +89,29 @@ impl<S: KVStore> SparseMerkleTree<S> {
         }
     }
 
+    /// Returns the root of the sparse merkle tree
+    #[inline]
+    pub fn root(&self) -> Bytes {
+        self.root.clone()
+    }
+
+    /// Returns the root reference of the sparse merkle tree
+    #[inline]
+    pub fn root_ref(&self) -> &[u8] {
+        &self.root
+    }
+
+    /// Set new root for the tree
+    #[inline]
+    pub fn set_root(&mut self, root: impl Into<Bytes>) {
+        self.root = root.into();
+    }
+
     #[inline]
     fn depth(&self) -> usize {
         TreeHasher::<S::Hasher>::path_size() * 8
     }
-}
 
-impl<S: KVStore> SparseMerkleTree<S> {
     /// Gets the value of a key from the tree.
     pub fn get(&self, key: &[u8]) -> Result<Option<Bytes>, <S as KVStore>::Error> {
         if self.root.as_ref().eq(self.th.placeholder_ref()) {
@@ -328,17 +364,43 @@ impl<S: KVStore> SparseMerkleTree<S> {
     /// Use if a key was _not_ previously added with AddBranch, otherwise use Get.
     /// Errors if the key cannot be reached by descending.
     pub fn get_descend(&self, key: impl AsRef<[u8]>) -> Result<Option<Bytes>, S::Error> {
-        let root = self.root();
-
-        if root.eq(self.th.placeholder_ref()) {
+        if self.root.eq(self.th.placeholder_ref()) {
             // The tree is empty
             return Ok(None);
         }
 
         let path = self.th.path(key);
-        let mut current_hash = root;
         let depth = self.depth();
-        for i in 0..depth {
+
+        // avoid call shallow clone on root
+        let current_data = self.nodes.get(&self.root)?;
+        if TreeHasher::<<S as KVStore>::Hasher>::is_leaf(&current_data) {
+            // We've reached the end. Is this the actual leaf?
+            let (actual_path, _) =
+                TreeHasher::<<S as KVStore>::Hasher>::parse_leaf(current_data.as_ref().unwrap());
+            if path.as_ref().ne(actual_path) {
+                // Nope. Therefore the key is actually empty.
+                return Ok(None);
+            }
+
+            // Otherwise, yes. Return the value.
+            return self.values.get(path.as_ref());
+        }
+
+        let (left, right) = TreeHasher::<<S as KVStore>::Hasher>::parse_node(&current_data);
+
+        let mut current_hash = if get_bit_at_from_msb(path.as_ref(), 0) == RIGHT {
+            right
+        } else {
+            left
+        };
+
+        if current_hash.eq(self.th.placeholder_ref()) {
+            // We've hit a placeholder value; this is the end.
+            return Ok(None);
+        }
+
+        for i in 1..depth {
             let current_data = self.nodes.get(&current_hash)?;
             if TreeHasher::<<S as KVStore>::Hasher>::is_leaf(&current_data) {
                 // We've reached the end. Is this the actual leaf?
@@ -391,20 +453,21 @@ impl<S: KVStore> SparseMerkleTree<S> {
         &self,
         proof: SparseMerkleProof<S::Hasher>,
         key: impl AsRef<[u8]>,
-        val: Bytes,
+        val: impl Into<Bytes> + AsRef<[u8]>,
     ) -> Result<(), S::Error> {
-        let (result, updates) = proof.verify_proof_with_updates(&self.root, key.as_ref(), &val);
+        let val_ref = val.as_ref();
+        let (result, updates) = proof.verify_proof_with_updates(&self.root, key.as_ref(), val_ref);
         if !result {
             return Err(BadProof.into());
         }
 
         if val.as_ref().ne(DEFAULT_VALUE.as_ref()) {
             // Membership proof.
-            self.values.set(self.th.path_into(key), val)?;
+            self.values.set(self.th.path_into(key), val.into())?;
         }
 
         let SparseMerkleProof {
-            mut side_nodes,
+            side_nodes,
             non_membership_leaf_data: _,
             sibling_data,
             _marker,
@@ -646,12 +709,6 @@ impl<S: KVStore> SparseMerkleTree<S> {
             current_data,
         })
     }
-}
-
-/// A deep Sparse Merkle subtree for working on only a few leafs.
-#[repr(transparent)]
-pub struct DeepSparseMerkleSubTree<S: KVStore> {
-    tree: SparseMerkleTree<S>,
 }
 
 struct UpdateResult {
