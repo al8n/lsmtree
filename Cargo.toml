@@ -1,10 +1,12 @@
 [package]
-name = "smt"
-version = "0.0.0"
+name = "smtree"
+version = "0.0.1"
 edition = "2021"
 repository = "https://github.com/al8n/smt"
 description = "Implements a Sparse Merkle tree for a key-value store. The tree implements the same optimisations specified in the libra whitepaper, to reduce the number of hash operations required per tree operation to O(k) where k is the number of non-empty elements in the tree."
 license = "MIT/Apache-2.0"
+keywords = ["merkletree", "merkle", "merkle-tree", "sparse merkle tree", "smt"]
+category = ["cryptography", "data-structures", "no_std"]
 
 [[bench]]
 path = "benches/bench.rs"
@@ -22,9 +24,8 @@ overflow-checks = false
 rpath = false
 
 [features]
-default = ["std", "nightly"]
+default = ["std"]
 std = ["bytes/default"]
-nightly = []
 
 [dependencies]
 bytes = { version = "1.2", default-features = false }

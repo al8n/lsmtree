@@ -12,8 +12,5 @@ cargo test --lib --all-features --target x86_64-unknown-linux-gnu
 RUSTFLAGS="-Z sanitizer=leak" \
 cargo test --lib --all-features --target x86_64-unknown-linux-gnu
 
-# Run thread sanitizer
-RUSTFLAGS="-Z sanitizer=thread" \
-cargo -Zbuild-std test --lib --all-features --target x86_64-unknown-linux-gnu
 
 

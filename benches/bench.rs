@@ -4,7 +4,7 @@ use bytes::Bytes;
 use criterion::*;
 use hashbrown::HashMap;
 use parking_lot::Mutex;
-use smt::{BadProof, KVStore, SparseMerkleTree};
+use smtree::{BadProof, KVStore, SparseMerkleTree};
 
 #[derive(Debug)]
 pub enum Error {
