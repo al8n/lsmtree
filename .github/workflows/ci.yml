@@ -200,7 +200,7 @@ jobs:
       - stable
       - nightly
       - sanitizer
-      - miri
+      # - miri
       # - valgrind
     steps:
       - uses: actions/checkout@v3
