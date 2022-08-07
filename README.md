@@ -23,7 +23,7 @@ English | [简体中文][zh-cn-url]
 ## Installation
 ```toml
 [dependencies]
-lsmtree = "0.0.5"
+lsmtree = "0.0.6"
 ```
 
 ## Example

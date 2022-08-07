@@ -1,5 +1,5 @@
 use alloc::boxed::Box;
-use alloc::vec::Vec;
+use alloc::{vec, vec::Vec};
 use bytes::Bytes;
 use digest::{generic_array::GenericArray, Digest, OutputSizeUser};
 

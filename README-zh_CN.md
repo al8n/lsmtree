@@ -23,7 +23,7 @@ A Rust library that implements a Sparse Merkle tree for a key-value map. The tre
 ## Installation
 ```toml
 [dependencies]
-lsmtree = "0.0.1"
+lsmtree = "0.0.6"
 ```
 
 #### License
