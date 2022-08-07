@@ -33,18 +33,6 @@ pub struct SimpleStore {
     data: Arc<Mutex<HashMap<Bytes, Bytes>>>,
 }
 
-impl core::fmt::Display for SimpleStore {
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        let data = self.data.lock();
-        writeln!(f, "length: {}", data.len())?;
-        for (key, value) in data.iter() {
-            writeln!(f, "{:?} => {:?}", key.as_ref(), value.as_ref())?;
-            writeln!(f)?;
-        }
-        Ok(())
-    }
-}
-
 impl SimpleStore {
     pub fn new() -> Self {
         Self {
@@ -81,18 +69,6 @@ impl KVStore for SimpleStore {
 #[derive(Debug, Clone, Default)]
 pub struct DummyStore {
     data: Arc<Mutex<HashMap<Bytes, Bytes>>>,
-}
-
-impl core::fmt::Display for DummyStore {
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        let data = self.data.lock();
-        writeln!(f, "length: {}", data.len())?;
-        for (key, value) in data.iter() {
-            writeln!(f, "{:?} => {:?}", key.as_ref(), value.as_ref())?;
-            writeln!(f)?;
-        }
-        Ok(())
-    }
 }
 
 impl DummyStore {

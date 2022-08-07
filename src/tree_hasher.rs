@@ -37,7 +37,7 @@ impl<H: Digest + OutputSizeUser> Default for TreeHasher<H> {
     }
 }
 
-impl<H: Digest + OutputSizeUser> TreeHasher<H> {
+impl<H: Digest> TreeHasher<H> {
     pub(crate) fn new(zero_value: Bytes) -> Self {
         Self {
             _marker: Default::default(),
@@ -102,7 +102,7 @@ impl<H: Digest + OutputSizeUser> TreeHasher<H> {
         value.extend_from_slice(left_data);
         value.extend_from_slice(right_data);
         let ptr = Box::into_raw(Box::new(<H as Digest>::digest(&value))) as *mut u8;
-        let size = <H as OutputSizeUser>::output_size();
+        let size = <H as Digest>::output_size();
         let sum = Bytes::from(unsafe { Vec::from_raw_parts(ptr, size, size) });
         (sum, value.into())
     }
@@ -165,7 +165,7 @@ impl<H: Digest + OutputSizeUser> TreeHasher<H> {
 
     pub(crate) fn path_into(&self, key: impl AsRef<[u8]>) -> Bytes {
         let ptr = Box::into_raw(Box::new(<H as Digest>::digest(key))) as *mut u8;
-        let size = <H as OutputSizeUser>::output_size();
+        let size = <H as Digest>::output_size();
         Bytes::from(unsafe { Vec::from_raw_parts(ptr, size, size) })
     }
 

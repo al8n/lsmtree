@@ -2,6 +2,7 @@
 //!
 //! [libra whitepaper]: https://libra.org/docs/libra-whitepaper.pdf
 #![cfg_attr(not(feature = "std"), no_std)]
+// #![cfg_attr(feature = "nightly", feature(generic_const_exprs))]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(docsrs, allow(unused_attributes))]
 #![deny(missing_docs)]
