@@ -183,13 +183,13 @@ jobs:
   #       run: valgrind --error-exitcode=1 --leak-check=full --show-leak-kinds=all ./target/debug/test-growable
   #       working-directory: integration
 
-  miri:
-    name: miri
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Miri
-        run: ci/miri.sh
+  # miri:
+  #   name: miri
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v3
+  #     - name: Miri
+  #       run: ci/miri.sh
 
   tarpaulin:
     name: cargo tarpaulin
